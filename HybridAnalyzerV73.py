@@ -56,7 +56,7 @@ except Exception as e:
     FIREBASE_ENABLED = False
     print(f"Eroare de initializare Firebase global: {e}")
 
-# --- Core Hybrid Analyzer Functions V7.3 (Trunchiat pentru concizie - presupunand ca logica e corecta) ---
+# --- Core Hybrid Analyzer Functions V7.3 ---
 
 def calculate_kld_bidimensional(kld_total: float, kld_handicap: float, treshold_kld_low: float = 0.05, treshold_kld_high: float = 0.25, treshold_kld_very_high: float = 0.40, treshold_kld_limit: float = 0.65) -> (str, float):
     avg_kld = (kld_total + kld_handicap) / 2
@@ -91,7 +91,7 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
                 'open_under': data.get(f'tp_open_under_{line}', 1.0),
                 'close_under': data.get(f'tp_close_under_{line}', 1.0)
             }
-        
+            
         close_line_val = tp_data.get('close', {}).get('line', 0.0)
         historical_open_line = data.get('tp_line_open_hist', close_line_val) 
         
@@ -105,7 +105,7 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
                 'open_away': data.get(f'hd_open_away_{line}', 1.0),
                 'close_away': data.get(f'hd_close_away_{line}', 1.0)
             }
-        
+            
     except Exception as e:
         return f"❌ **Eroare la prelucrarea datelor de intrare:** Asigurati-va ca toate campurile numerice sunt completate corect.\nDetalii: {e}", {}
 
@@ -116,11 +116,12 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
     elif initial_line_tp > historical_open_line: consensus_direction = "UNDER"
     else: consensus_direction = "STABLE"
     
-    # --- 3. KLD (Kullback-Leibler Divergence) Calculation (Trunchiat) ---
-    kld_total_list = []
+    # --- 3. KLD (Kullback-Leibler Divergence) Calculation (Placeholder) ---
+    # Notă: Asigură-te că logica reală de calcul KLD umple aceste liste.
+    kld_total_list = [] 
     kld_handicap_list = []
     
-    final_kld_total = np.mean([abs(k) for k in kld_total_list]) if kld_total_list else 0.0
+    final_kld_total = np.mean([abs(k) for k in kld_total_list]) if kld_total_list else 0.0 
     final_kld_handicap = np.mean(kld_handicap_list) if kld_handicap_list else 0.0
 
     # --- 4. Hybrid Decision (KLD Bidimensional V7.3) ---
@@ -134,10 +135,11 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
     elif kld_action.startswith("SKIP"): final_bet_direction = "SKIP"
     else: final_bet_direction = "EVAL/SKIP"
 
-    # --- 5. Final Output Generation ---
+    # --- 5. Final Output Generation (AICI ERA PROBLEMA) ---
     final_line = initial_line_tp
     close_data = tp_data.get('close', {})
     
+    # ⚠️ Logica Buffer/Odd Final ⚠️
     if final_bet_direction == "OVER":
         final_odd = close_data.get('close_over', 0.0) 
         buffered_line = final_line + buffer_value if kld_action.startswith("INVERT") or kld_action.startswith("OVERRIDE") else final_line - buffer_value
@@ -149,10 +151,24 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         final_odd = 0.0
         buffer_value = 0.0
         
+    # --- CONSTRUIREA RAPORTULUI DETALIAT (NOU) ---
     output_markdown = f"""
 ## 📊 Raport Analiza Hibrid V7.3 - {data.get('liga', 'N/A')}
 ### 📜 Meci: **{data.get('echipa_gazda', 'N/A')} vs {data.get('echipa_oaspete', 'N/A')}**
-Analiza detaliata...
+
+---
+#### 🧠 Decizia Hibridă
+* **Direcția Consensului Inițial (Open vs Close):** **`{consensus_direction}`** (Linia {historical_open_line} a devenit {initial_line_tp})
+* **Divergența KLD (Total):** `{final_kld_total:.4f}`
+* **Divergența KLD (Handicap):** `{final_kld_handicap:.4f}`
+* **Acțiunea KLD Determinate:** **`{kld_action}`** (Valoare Buffer: {buffer_value:.2f})
+
+---
+#### ✨ Recomandare Finală
+* **Direcția de Pariu Finală:** **`{final_bet_direction}`**
+* **Linia Originală:** `{final_line:.1f}`
+* **Linia Recomandată/Bufferată:** `{buffered_line:.2f}` (Recomandat pentru siguranță)
+* **Cota de Referință (la Linia Originală):** `{final_odd:.3f}`
 """
     
     result_data = {
@@ -173,6 +189,7 @@ Analiza detaliata...
         'timestamp': SERVER_TIMESTAMP if FIREBASE_ENABLED and 'SERVER_TIMESTAMP' in globals() else time.time()
     }
     
+    # --- 6. Returnarea rezultatelor
     return output_markdown, result_data
 
 # --- Firebase Save Function ---
@@ -218,7 +235,6 @@ def load_analysis_data(doc_id: str):
         return None
         
     try:
-        # Functia critica de citire
         doc_ref = db.collection(COLLECTION_NAME_NBA).document(doc_id)
         doc = doc_ref.get()
         
@@ -241,6 +257,15 @@ def load_all_analysis_data(limit=100):
         results = []
         for doc in docs:
             data = doc.to_dict()
+            # Conversia timestamp pentru afișare
+            timestamp_value = data.get('timestamp')
+            if isinstance(timestamp_value, firestore.client.firestore.Timestamp):
+                timestamp_formatted = timestamp_value.strftime('%Y-%m-%d %H:%M')
+            elif isinstance(timestamp_value, (int, float)):
+                 timestamp_formatted = pd.to_datetime(timestamp_value, unit='s', errors='ignore').strftime('%Y-%m-%d %H:%M')
+            else:
+                 timestamp_formatted = 'N/A'
+
             results.append({
                 'ID': doc.id,
                 'Liga': data.get('liga', 'N/A'),
@@ -250,7 +275,7 @@ def load_all_analysis_data(limit=100):
                 'Actiune KLD': data.get('kld_action', 'EVAL'),
                 'KLD Total': f"{data.get('kld_total', 0.0):.4f}",
                 'Linie Bufferata': f"{data.get('buffered_line', 0.0):.2f}",
-                'Timestamp': pd.to_datetime(data.get('timestamp', time.time()), unit='s', errors='ignore').strftime('%Y-%m-%d %H:%M') if data.get('timestamp') else 'N/A',
+                'Timestamp': timestamp_formatted,
                 'analysis_markdown': data.get('analysis_markdown') 
             })
         return results
