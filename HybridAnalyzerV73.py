@@ -7,7 +7,7 @@ import math
 
 # --- Global Configuration and Firebase Setup ---
 
-# Variabila de colectie (Adaugata pentru a rezolva ImportError)
+# Variabila de colectie
 COLLECTION_NAME_NBA = "baschet"
 
 FIREBASE_ENABLED = False
@@ -28,33 +28,39 @@ def initialize_firebase():
         return True # Deja initializat
 
     try:
-        # Verificam daca importul bibliotecii a reusit si daca exista secretele
+        # 1. Verifica importurile
         if 'firebase_admin' not in globals():
-            st.warning("⚠️ Biblioteca 'firebase-admin' nu este instalată. Verificați requirements.txt.")
             return False
             
+        # 2. Verifica si incarca credențialele
         if "firestore_creds" in st.secrets:
-            # Use st.secrets for secure Streamlit Cloud deployment
             cred = credentials.Certificate(dict(st.secrets["firestore_creds"]))
         else:
-            # Daca secretele lipsesc, dezactivam functionalitatea
-            st.warning("⚠️ Credențialele Firebase ('firestore_creds') nu sunt găsite în st.secrets. Funcționalitatea Firebase este dezactivată.")
+            print("⚠️ Credențialele Firebase ('firestore_creds') nu sunt găsite în st.secrets.")
             return False
 
+        # 3. Initializare aplicatie Firebase
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
             db = firestore.client()
             FIREBASE_ENABLED = True
-            print("Firebase successfully initialized via st.secrets.")
+            print("✅ Conexiune Firebase reușită.")
             return True
             
     except Exception as e:
-        # Păstrăm funcționalitatea dezactivată dar afișăm o eroare în consolă
-        print(f"❌ Eroare la inițializarea Firebase: {e}") 
+        # Trateaza orice eroare de conexiune/initializare FARA a bloca aplicatia
+        print(f"❌ Eroare fatală la inițializarea Firebase: {e}") 
+        # Dezactiveaza Firebase in caz de eroare
+        FIREBASE_ENABLED = False
         return False
 
 # Attempt to initialize Firebase when the script loads
-initialize_firebase()
+try:
+    initialize_firebase()
+except Exception as e:
+    # Setăm Firebase pe False chiar dacă inițializarea eșuează
+    FIREBASE_ENABLED = False
+    print(f"Eroare de inițializare Firebase global: {e}")
 
 # --- Core Hybrid Analyzer Functions V7.3 ---
 
@@ -139,7 +145,6 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         tp_data = {}
         for line in tp_lines:
             tp_data[line] = {
-                # Ne asiguram ca valorile sunt convertite la float si ca lipsa lor nu da eroare
                 'line': data.get(f'tp_line_{line}', 0.0),
                 'open_over': data.get(f'tp_open_over_{line}', 1.0),
                 'close_over': data.get(f'tp_close_over_{line}', 1.0),
@@ -148,7 +153,8 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
             }
         
         # Historical Open Line 
-        historical_open_line = data.get('tp_line_open_hist', tp_data['close']['line']) 
+        close_line_val = tp_data.get('close', {}).get('line', 0.0)
+        historical_open_line = data.get('tp_line_open_hist', close_line_val) 
         
         # Handicap Data (HD)
         hd_lines = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
@@ -194,12 +200,12 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         return (1/odd) if odd > 1.0 else 0.0
         
     for line_key in tp_lines:
-        data_tp = tp_data[line_key]
+        data_tp_line = tp_data[line_key]
         
-        P_over = calculate_ip(data_tp['open_over'])
-        Q_over = calculate_ip(data_tp['close_over'])
-        P_under = calculate_ip(data_tp['open_under'])
-        Q_under = calculate_ip(data_tp['close_under'])
+        P_over = calculate_ip(data_tp_line['open_over'])
+        Q_over = calculate_ip(data_tp_line['close_over'])
+        P_under = calculate_ip(data_tp_line['open_under'])
+        Q_under = calculate_ip(data_tp_line['close_under'])
         
         if Q_over > 0 and P_over > 0:
             kld_over = P_over * math.log(P_over / Q_over)
@@ -219,12 +225,12 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         kld_total_list.append(kld_line)
 
     for line_key in hd_lines:
-        data_hd = hd_data[line_key]
+        data_hd_line = hd_data[line_key]
         
-        P_home = calculate_ip(data_hd['open_home'])
-        Q_home = calculate_ip(data_hd['close_home'])
-        P_away = calculate_ip(data_hd['open_away'])
-        Q_away = calculate_ip(data_hd['close_away'])
+        P_home = calculate_ip(data_hd_line['open_home'])
+        Q_home = calculate_ip(data_hd_line['close_home'])
+        P_away = calculate_ip(data_hd_line['open_away'])
+        Q_away = calculate_ip(data_hd_line['close_away'])
         
         if Q_home > 0 and P_home > 0:
             kld_home = P_home * math.log(P_home / Q_home)
@@ -263,14 +269,16 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
     # --- 5. Final Output Generation ---
     final_line = initial_line_tp
     
+    close_data = tp_data.get('close', {})
+    
     if final_bet_direction == "OVER":
-        final_odd = data_tp['close']['close_over'] # Am schimbat data_tp[close] cu data_tp['close']
+        final_odd = close_data.get('close_over', 0.0) 
         if kld_action.startswith("INVERT") or kld_action.startswith("OVERRIDE"):
             buffered_line = final_line + buffer_value
         else:
             buffered_line = final_line - buffer_value
     elif final_bet_direction == "UNDER":
-        final_odd = data_tp['close']['close_under']
+        final_odd = close_data.get('close_under', 0.0)
         if kld_action.startswith("INVERT") or kld_action.startswith("OVERRIDE"):
             buffered_line = final_line - buffer_value
         else:
@@ -360,7 +368,6 @@ def save_to_firebase(data: dict) -> bool:
         return False
         
     try:
-        # Creeaza un document name bazat pe detalii si timestamp (daca lipseste din data)
         timestamp_str = data.get('timestamp') if isinstance(data.get('timestamp'), str) else pd.Timestamp.now().strftime('%Y%m%d%H%M%S')
         doc_name = f"{data.get('liga', 'L')}-{data.get('gazda', 'G')}-vs-{data.get('oaspete', 'O')}-{timestamp_str}"
         doc_name = doc_name.replace(" ", "_").replace("/", "-")
@@ -374,8 +381,6 @@ def save_to_firebase(data: dict) -> bool:
 
 # --- Firebase Load Functions ---
 
-# --- Firebase Load Functions (Numele corectate pentru import) ---
-
 def load_analysis_ids():
     """Fetches all document IDs from the configured collection."""
     global FIREBASE_ENABLED, db
@@ -383,16 +388,11 @@ def load_analysis_ids():
         return ["Firebase Dezactivat"]
         
     try:
-        # **Atenție: Am revenit la citirea simplă pentru a evita erorile de timestamp/index**
         docs = db.collection(COLLECTION_NAME_NBA).list_documents() 
         ids = [doc.id for doc in docs]
-        
-        # Sortare locală, dacă este necesar (bazat pe ID, de obicei cel mai nou are timestamp mai mare)
         ids.sort(reverse=True)
-        
-        return ids
+        return ids[:100]
     except Exception as e:
-        # Adăugăm un mesaj de eroare Streamlit aici pentru debugging vizibil
         st.error(f"❌ Eroare la citirea ID-urilor din Firestore: {e}") 
         return ["Eroare la Încărcare"]
 
