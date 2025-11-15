@@ -55,7 +55,6 @@ if 'form_data' not in st.session_state:
 if 'rerun_key_suffix' not in st.session_state:
     st.session_state['rerun_key_suffix'] = 0
 
-
 # --- 3. Functie Ajutatoare pentru Populare Formular ---
 def get_value(key):
     """
@@ -63,7 +62,8 @@ def get_value(key):
     """
     
     default_val = DEFAULT_FORM_DATA.get(key)
-    val = st.session_state['form_data'].get(key)
+    # ATENTIE: Folosim .get() pe 'form_data', care e sursa de adevar
+    val = st.session_state['form_data'].get(key) 
     
     if val is None or val == '' or str(val).lower() == 'none':
         return default_val
@@ -76,7 +76,8 @@ def get_value(key):
             return default_val
             
     if isinstance(default_val, str):
-        return str(val)
+        # Aici folosim valoarea din starea sesiunii pentru text_input, daca exista
+        return str(st.session_state.get(key, val))
         
     return val if val is not None else default_val
 
@@ -107,9 +108,16 @@ with st.sidebar:
                     if 'date_input' in data:
                         new_form_data.update(data['date_input'])
                     
+                    # 1. ACTUALIZARE FORM_DATA (Pentru number_input)
                     st.session_state['form_data'] = new_form_data
                     
-                    # NOU: INSCREMENTAM CHEIA PENTRU A FORȚA RE-RENDERIZAREA
+                    # 2. ACTUALIZARE CHEI TEXT (Pentru text_input - Populeaza Gazda/Oaspete/Liga)
+                    # Aici fortam popularea campurilor de text care sunt mai incapatanate
+                    st.session_state['liga'] = new_form_data.get('liga', 'NBA')
+                    st.session_state['echipa_gazda'] = new_form_data.get('echipa_gazda', 'Lakers')
+                    st.session_state['echipa_oaspete'] = new_form_data.get('echipa_oaspete', 'Celtics')
+                    
+                    # 3. INCREMENTAM CHEIA PENTRU A FORȚA RE-RENDERIZAREA CÂMPURILOR NUMERICE
                     st.session_state['rerun_key_suffix'] += 1
                     
                     st.session_state['analysis_output'] = data.get('analysis_markdown', "Raportul formatat nu a fost gasit in datele salvate.")
@@ -120,7 +128,7 @@ with st.sidebar:
                     
                     # BLOC DE VERIFICARE TIPURI DE DATE CRITICAL
                     st.markdown("---")
-                    st.subheader("🔎 Verificare Tipuri de Date (DEBUG)")
+                    st.subheader("🔎 Curățare Tipuri de Date (FINAL CHECK)")
                     all_good = True
                     
                     for k, v in st.session_state['form_data'].items():
@@ -151,6 +159,7 @@ with st.sidebar:
 st.title("🏀 Hybrid Analyzer V7.3 - Analiza Baschet")
 st.markdown("Introduceti cotele de deschidere (Open) si inchidere (Close) pentru 7 linii adiacente.")
 
+# Cheia de sufis se extrage O SINGURĂ dată
 current_key_suffix = str(st.session_state['rerun_key_suffix'])
 
 
@@ -160,12 +169,18 @@ with st.form(key='hybrid_analysis_form'):
     st.subheader("Detalii Meci")
     col_liga, col_gazda, col_oaspete = st.columns(3)
     
-    # Detalii Meci
-    # Cheile de string sunt lăsate simple (nu necesită reset key)
-    liga = col_liga.text_input("Liga", value=get_value('liga'), key='liga')
-    echipa_gazda = col_gazda.text_input("Echipa Gazda", value=get_value('echipa_gazda'), key='echipa_gazda')
-    echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", value=get_value('echipa_oaspete'), key='echipa_oaspete')
+    # Detalii Meci - Folosim direct starea sesiunii pentru VALOARE
+    liga = col_liga.text_input("Liga", 
+                               value=st.session_state.get('liga', get_value('liga')), 
+                               key='liga')
+    echipa_gazda = col_gazda.text_input("Echipa Gazda", 
+                                        value=st.session_state.get('echipa_gazda', get_value('echipa_gazda')), 
+                                        key='echipa_gazda')
+    echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", 
+                                           value=st.session_state.get('echipa_oaspete', get_value('echipa_oaspete')), 
+                                           key='echipa_oaspete')
 
+    # Colectam datele de intrare (text_input nu actualizeaza automat form_data la reroll, deci le preluam manual)
     data_input = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': echipa_oaspete}
 
     st.markdown("---")
@@ -188,9 +203,10 @@ with st.form(key='hybrid_analysis_form'):
     col_open_hist, _ = st.columns([1, 5])
     
     key_hist = 'tp_line_open_hist'
+    # number_input: Cheie_Unica = Cheie_Baza + Sufix
     tp_line_open_hist = col_open_hist.number_input("Open Istoric", min_value=150.0, max_value=300.0, 
                                                   value=get_value(key_hist), step=0.5, format="%.1f", 
-                                                  key=key_hist + current_key_suffix) # ADAUGARE SUFIX
+                                                  key=key_hist + current_key_suffix) 
     data_input[key_hist] = tp_line_open_hist
     st.markdown("---")
 
