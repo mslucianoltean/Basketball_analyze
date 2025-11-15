@@ -140,7 +140,8 @@ with st.sidebar:
                     # Daca toate tipurile de date sunt corecte, abia atunci rulam din nou
                     if all_good:
                         st.info("Toate tipurile de date numerice sunt corecte. Rulam din nou...")
-                        st.experimental_rerun()
+                        # CORECTIA ESTE AICI: st.experimental_rerun() -> st.rerun()
+                        st.rerun() 
                     else:
                         st.warning("⚠️ S-au detectat erori de tip de date. Rerun blocat. Corectati manual valorile inainte de a rula analiza.")
                     
