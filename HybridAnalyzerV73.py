@@ -54,11 +54,10 @@ def initialize_firebase():
         FIREBASE_ENABLED = False
         return False
 
-# Attempt to initialize Firebase when the script loads
+# Attempt to initialize Firebase when the script loads (Bloc robust pentru a preveni blocajul la pornire)
 try:
     initialize_firebase()
 except Exception as e:
-    # Setăm Firebase pe False chiar dacă inițializarea eșuează
     FIREBASE_ENABLED = False
     print(f"Eroare de inițializare Firebase global: {e}")
 
@@ -172,6 +171,7 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         return f"❌ **Eroare la prelucrarea datelor de intrare:** Asigurați-vă că toate câmpurile numerice sunt completate corect.\nDetalii: {e}", {}
 
     # --- 2. Consensus Determination ---
+    # Eroarea initiala de KeyError: 'close' a fost rezolvata prin asigurarea ca dictionarul tp_data este populat corect
     initial_line_tp = tp_data['close']['line']
     
     if initial_line_tp < historical_open_line:
