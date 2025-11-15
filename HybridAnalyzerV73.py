@@ -374,18 +374,26 @@ def save_to_firebase(data: dict) -> bool:
 
 # --- Firebase Load Functions ---
 
+# --- Firebase Load Functions (Numele corectate pentru import) ---
+
 def load_analysis_ids():
     """Fetches all document IDs from the configured collection."""
+    global FIREBASE_ENABLED, db
     if not FIREBASE_ENABLED or not db:
         return ["Firebase Dezactivat"]
         
     try:
-        # Folosim order_by si limit pentru a pastra lista scurta si relevanta
-        docs = db.collection(COLLECTION_NAME_NBA).order_by('timestamp', direction=firestore.Query.DESCENDING).limit(100).stream()
+        # **Atenție: Am revenit la citirea simplă pentru a evita erorile de timestamp/index**
+        docs = db.collection(COLLECTION_NAME_NBA).list_documents() 
         ids = [doc.id for doc in docs]
+        
+        # Sortare locală, dacă este necesar (bazat pe ID, de obicei cel mai nou are timestamp mai mare)
+        ids.sort(reverse=True)
+        
         return ids
     except Exception as e:
-        st.error(f"❌ Eroare la citirea ID-urilor din Firestore: {e}")
+        # Adăugăm un mesaj de eroare Streamlit aici pentru debugging vizibil
+        st.error(f"❌ Eroare la citirea ID-urilor din Firestore: {e}") 
         return ["Eroare la Încărcare"]
 
 def load_analysis_data(doc_id: str):
