@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 
-# IMPORTURI CORECTATE
+# IMPORTURI
 from HybridAnalyzerV73 import (
     run_hybrid_analyzer, 
     save_to_firebase, 
@@ -13,27 +13,50 @@ from HybridAnalyzerV73 import (
 
 st.set_page_config(layout="wide", page_title="Hybrid Analyzer V7.3")
 
-# --- Initializare Stare ---
+# --- Initializare Stare si Valori Implicite ---
+DEFAULT_FORM_DATA = {
+    'liga': "NBA", 'echipa_gazda': "Lakers", 'echipa_oaspete': "Celtics",
+    'tp_line_open_hist': 220.5,
+}
+
+# Adaugam valorile implicite pentru cele 7 linii TP si 7 linii HD (ca float)
+for key in ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']:
+    DEFAULT_FORM_DATA[f'tp_line_{key}'] = 220.0
+    DEFAULT_FORM_DATA[f'tp_open_over_{key}'] = 1.90
+    DEFAULT_FORM_DATA[f'tp_close_over_{key}'] = 1.95
+    DEFAULT_FORM_DATA[f'tp_open_under_{key}'] = 1.90
+    DEFAULT_FORM_DATA[f'tp_close_under_{key}'] = 1.85
+    
+    DEFAULT_FORM_DATA[f'hd_line_{key}'] = -5.0
+    DEFAULT_FORM_DATA[f'hd_open_home_{key}'] = 1.90
+    DEFAULT_FORM_DATA[f'hd_close_home_{key}'] = 1.95
+    DEFAULT_FORM_DATA[f'hd_open_away_{key}'] = 1.90
+    DEFAULT_FORM_DATA[f'hd_close_away_{key}'] = 1.85
+
+
 if 'analysis_output' not in st.session_state:
     st.session_state['analysis_output'] = ""
 if 'result_data' not in st.session_state:
     st.session_state['result_data'] = {}
 
-# Stocheaza TOATE datele de input pentru a popula formularul la reincarcare
+# Sursa unica de adevar pentru inputuri
 if 'form_data' not in st.session_state:
-    st.session_state['form_data'] = {} 
-    
+    st.session_state['form_data'] = DEFAULT_FORM_DATA.copy()
+
+
 # --- Functie Ajutatoare pentru Populare Formular ---
-def get_value(key, default):
-    """Returnează valoarea din starea sesiunii dacă există, altfel returnează valoarea implicită."""
-    # Atenție la tipurile de date (ex: float pentru number_input)
-    val = st.session_state['form_data'].get(key, default)
-    if isinstance(default, float) or isinstance(default, int):
+def get_value(key):
+    """Returnează valoarea din starea sesiunii, folosind valoarea implicită dacă nu este găsită."""
+    val = st.session_state['form_data'].get(key, DEFAULT_FORM_DATA.get(key))
+    
+    # Asigura conversia la tipul corect (Streamlit poate citi numere ca str din state)
+    if isinstance(DEFAULT_FORM_DATA.get(key), (float, int)):
         try:
-            return float(val)
+            return float(val) if val is not None else DEFAULT_FORM_DATA.get(key)
         except (ValueError, TypeError):
-            return default
-    return val
+            return DEFAULT_FORM_DATA.get(key)
+    return val if val is not None else DEFAULT_FORM_DATA.get(key)
+
 
 # --- Bara Laterala (Sidebar) ---
 
@@ -43,11 +66,11 @@ with st.sidebar:
     if FIREBASE_ENABLED:
         match_ids = load_analysis_ids()
         
-        # Adaugam optiunea de re-analiza (pentru a putea reincarca formularul)
         selected_id = st.selectbox(
             "Selectează ID Analiză (Top 100):",
             match_ids,
-            index=None
+            index=None,
+            key='selectbox_id'
         )
 
         if st.button("Încarcă Analiză pentru Reanaliză"):
@@ -56,20 +79,21 @@ with st.sidebar:
                 if data:
                     st.success(f"Analiza `{selected_id}` încărcată. Datele au populat formularul principal.")
                     
-                    # 1. Stocheaza datele de input in starea sesiunii pentru a POPULA formularul
+                    # 1. ACTUALIZEAZĂ STAREA SESIUNII CU NOILE DATE
+                    # Actualizeaza form_data pentru a popula formularul
                     if 'date_input' in data:
-                        st.session_state['form_data'] = data['date_input']
+                        st.session_state['form_data'].update(data['date_input'])
                     
-                    # 2. Afișează raportul formatat in pagina principala
+                    # Actualizeaza starea pentru raport
                     st.session_state['analysis_output'] = data.get('analysis_markdown', "Raportul formatat nu a fost găsit în datele salvate.")
                     st.session_state['result_data'] = data
                     
-                    st.subheader("Date Analiză Brute")
                     # Afișează datele brute in sidebar
+                    st.subheader("Date Analiză Brute (Firebase)")
                     st.json(data)
                     
-                    # Fortam re-rularea Streamlit pentru a actualiza valorile formularului
-                    st.rerun() 
+                    # RE-RULEAZA APLICATIA PENTRU A ACTUALIZA FORMULARUL
+                    st.experimental_rerun() # Folosim experimental_rerun() pentru compatibilitate cu Streamlit 1.x / Streamlit Cloud
                 else:
                     st.error("Nu s-au putut încărca datele pentru ID-ul selectat.")
             else:
@@ -90,9 +114,9 @@ with st.form(key='hybrid_analysis_form'):
     col_liga, col_gazda, col_oaspete = st.columns(3)
     
     # Detalii Meci (Folosesc get_value pentru a prelua valorile din starea sesiunii)
-    liga = col_liga.text_input("Liga", value=get_value('liga', "NBA"))
-    echipa_gazda = col_gazda.text_input("Echipa Gazdă", value=get_value('echipa_gazda', "Lakers"))
-    echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", value=get_value('echipa_oaspete', "Celtics"))
+    liga = col_liga.text_input("Liga", value=get_value('liga'), key='liga')
+    echipa_gazda = col_gazda.text_input("Echipa Gazdă", value=get_value('echipa_gazda'), key='echipa_gazda')
+    echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", value=get_value('echipa_oaspete'), key='echipa_oaspete')
 
     # Dictionar care va fi pasat la run_hybrid_analyzer
     data_input = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': echipa_oaspete}
@@ -118,7 +142,7 @@ with st.form(key='hybrid_analysis_form'):
     
     key_hist = 'tp_line_open_hist'
     tp_line_open_hist = col_open_hist.number_input("Open Istoric", min_value=150.0, max_value=300.0, 
-                                                  value=get_value(key_hist, 220.5), step=0.5, format="%.1f", key=key_hist)
+                                                  value=get_value(key_hist), step=0.5, format="%.1f", key=key_hist)
     data_input[key_hist] = tp_line_open_hist
     st.markdown("---")
 
@@ -130,16 +154,18 @@ with st.form(key='hybrid_analysis_form'):
         col1, col2, col3, col4, col5, col6 = st.columns(6)
         
         col1.markdown(f"**{label}**")
+        
+        # Atentie: Cheia din data_input trebuie sa fie aceeasi cu cheia de stare
         data_input[f'tp_line_{key}'] = col2.number_input("", min_value=150.0, max_value=300.0, 
-                                                          value=get_value(f'tp_line_{key}', 220.0), step=0.5, format="%.1f", key=f'tp_val_{key}')
+                                                          value=get_value(f'tp_line_{key}'), step=0.5, format="%.1f", key=f'tp_line_{key}')
         data_input[f'tp_open_over_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
-                                                               value=get_value(f'tp_open_over_{key}', 1.90), step=0.01, format="%.2f", key=f'tp_oo_{key}')
+                                                               value=get_value(f'tp_open_over_{key}'), step=0.01, format="%.2f", key=f'tp_open_over_{key}')
         data_input[f'tp_close_over_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'tp_close_over_{key}', 1.95), step=0.01, format="%.2f", key=f'tp_co_{key}')
+                                                                value=get_value(f'tp_close_over_{key}'), step=0.01, format="%.2f", key=f'tp_close_over_{key}')
         data_input[f'tp_open_under_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'tp_open_under_{key}', 1.90), step=0.01, format="%.2f", key=f'tp_ou_{key}')
+                                                                value=get_value(f'tp_open_under_{key}'), step=0.01, format="%.2f", key=f'tp_open_under_{key}')
         data_input[f'tp_close_under_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
-                                                                 value=get_value(f'tp_close_under_{key}', 1.85), step=0.01, format="%.2f", key=f'tp_cu_{key}')
+                                                                 value=get_value(f'tp_close_under_{key}'), step=0.01, format="%.2f", key=f'tp_close_under_{key}')
 
     st.markdown("---")
 
@@ -164,19 +190,19 @@ with st.form(key='hybrid_analysis_form'):
         col1.markdown(f"**{label}**")
         # Valoarea liniei (ex: -5.0)
         data_input[f'hd_line_{key}'] = col2.number_input("", min_value=-20.0, max_value=20.0, 
-                                                          value=get_value(f'hd_line_{key}', -5.0), step=0.5, format="%.1f", key=f'hd_val_{key}')
+                                                          value=get_value(f'hd_line_{key}'), step=0.5, format="%.1f", key=f'hd_line_{key}')
         
         # Home (Gazda)
         data_input[f'hd_open_home_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
-                                                               value=get_value(f'hd_open_home_{key}', 1.90), step=0.01, format="%.2f", key=f'hd_ho_{key}')
+                                                               value=get_value(f'hd_open_home_{key}'), step=0.01, format="%.2f", key=f'hd_open_home_{key}')
         data_input[f'hd_close_home_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'hd_close_home_{key}', 1.95), step=0.01, format="%.2f", key=f'hd_hc_{key}')
+                                                                value=get_value(f'hd_close_home_{key}'), step=0.01, format="%.2f", key=f'hd_close_home_{key}')
         
         # Away (Oaspete)
         data_input[f'hd_open_away_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'hd_open_away_{key}', 1.90), step=0.01, format="%.2f", key=f'hd_ao_{key}')
+                                                                value=get_value(f'hd_open_away_{key}'), step=0.01, format="%.2f", key=f'hd_open_away_{key}')
         data_input[f'hd_close_away_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
-                                                                 value=get_value(f'hd_close_away_{key}', 1.85), step=0.01, format="%.2f", key=f'hd_ac_{key}')
+                                                                 value=get_value(f'hd_close_away_{key}'), step=0.01, format="%.2f", key=f'hd_close_away_{key}')
     
     st.markdown("---")
     
@@ -184,8 +210,7 @@ with st.form(key='hybrid_analysis_form'):
     submitted = st.form_submit_button("🔥 Rulează Analiza Hibrid V7.3")
 
     if submitted:
-        # La submit, copiem TOATE valorile curente ale formularului in st.session_state['form_data'] 
-        # (pentru a persista chiar si fara reincarcare din Firebase)
+        # La submit, copiem TOATE valorile curente ale formularului in st.session_state['form_data']
         st.session_state['form_data'].update(data_input)
         
         # Apelam functia principala de analiza
@@ -194,7 +219,9 @@ with st.form(key='hybrid_analysis_form'):
         # Salvare in Stare
         st.session_state['analysis_output'] = markdown_output
         st.session_state['result_data'] = result_data
-
+        
+        # Nu este nevoie de rerun la submit, Streamlit se ocupa
+        
 
 # --- Zona de Rezultate ---
 
