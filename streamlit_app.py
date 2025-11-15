@@ -14,6 +14,7 @@ from HybridAnalyzerV73 import (
 st.set_page_config(layout="wide", page_title="Hybrid Analyzer V7.3")
 
 # --- LINIA DE DEBUGGING PENTRU PORNIRE ---
+# Se afiseaza o singura data la inceputul rularii
 if not st.session_state.get('app_started', False):
     st.info("Aplicația a pornit. Verificăm starea Firebase...")
     st.session_state['app_started'] = True
@@ -52,26 +53,30 @@ if 'form_data' not in st.session_state:
     st.session_state['form_data'] = DEFAULT_FORM_DATA.copy()
 
 
-# --- 3. Functie Ajutatoare pentru Populare Formular (ROBUSTĂ) ---
+# --- 3. Functie Ajutatoare pentru Populare Formular (ROBUSTIFICATĂ) ---
 def get_value(key):
-    """Returnează valoarea din starea sesiunii, forțând conversia la tipul corect și tratând None/NULL."""
+    """
+    Returnează valoarea din starea sesiunii, folosind valoarea implicită (float/str)
+    dacă valoarea curentă este None, lipsă sau goală.
+    """
     
     default_val = DEFAULT_FORM_DATA.get(key)
-    val = st.session_state['form_data'].get(key, default_val)
-
-    # Gestiunea NULL/NONE sau a valorilor lipsa din Firebase
-    if val is None or val == 'None' or val == '':
+    # Folosim .get() pentru a prelua valoarea, care poate fi None daca nu exista
+    val = st.session_state['form_data'].get(key)
+    
+    # 1. Daca valoarea e nula sau goala, intoarcem default
+    if val is None or val == '' or val == 'None':
         return default_val
-        
-    # Conversia tipurilor (crucială pentru number_input)
+    
+    # 2. Daca valoarea implicita este float/int, incercam conversia
     if isinstance(default_val, (float, int)):
         try:
-            return float(val)
+            return float(val) 
         except (ValueError, TypeError):
-            # Dacă conversia eșuează, revenim la valoarea implicită
+            # Daca conversia esueaza (valoare non-numerica), revenim la default
             return default_val
             
-    # Returnăm valoarea pentru string-uri (text_input)
+    # 3. Pentru string-uri si alte tipuri valide, returnam valoarea
     return val 
 
 
@@ -96,25 +101,21 @@ with st.sidebar:
                 if data:
                     st.success(f"Analiza `{selected_id}` încărcată. Datele au populat formularul principal.")
                     
-                    # 1. INITIALIZEAZA CU VALORILE IMPLICITE COMPLETE
                     new_form_data = DEFAULT_FORM_DATA.copy()
                     
-                    # 2. FUZIONEAZA DATELE VECHI PESTE CELE NOI
                     if 'date_input' in data:
+                        # Fuzionam datele. get_value va gestiona curatarea tipurilor non-standard
                         new_form_data.update(data['date_input'])
                     
-                    # 3. ACTUALIZEAZĂ STAREA SESIUNII CU NOUA LISTĂ DE CHEI COMPLETE
                     st.session_state['form_data'] = new_form_data
                     
-                    # 4. Actualizeaza starea pentru raport
                     st.session_state['analysis_output'] = data.get('analysis_markdown', "Raportul formatat nu a fost găsit în datele salvate.")
                     st.session_state['result_data'] = data
                     
-                    # Afișează datele brute in sidebar
                     st.subheader("Date Analiză Brute (Firebase)")
                     st.json(data)
                     
-                    # RE-RULEAZA APLICATIA PENTRU A ACTUALIZA FORMULARUL
+                    # Rerun simplu: Eroarea a fost rezolvata prin robustificarea get_value
                     st.experimental_rerun() 
                 else:
                     st.error("Nu s-au putut încărca datele pentru ID-ul selectat.")
@@ -230,13 +231,13 @@ with st.form(key='hybrid_analysis_form'):
     submitted = st.form_submit_button("🔥 Rulează Analiza Hibrid V7.3")
 
     if submitted:
-        # La submit, copiem TOATE valorile curente ale formularului in st.session_state['form_data']
+        # 1. Salvarea datelor curente in st.session_state (sursa de adevar)
         st.session_state['form_data'].update(data_input)
         
-        # Apelam functia principala de analiza
+        # 2. Apelam functia principala de analiza
         markdown_output, result_data = run_hybrid_analyzer(data_input)
         
-        # Salvare in Stare
+        # 3. Salvare in Stare
         st.session_state['analysis_output'] = markdown_output
         st.session_state['result_data'] = result_data
         
