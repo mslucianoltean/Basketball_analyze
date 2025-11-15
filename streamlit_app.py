@@ -71,6 +71,7 @@ def get_value(key):
     # 2. Daca valoarea implicita este float/int, incercam conversia
     if isinstance(default_val, (float, int)):
         try:
+            # Foarte important: Streamlit vrea float sau int
             return float(val) 
         except (ValueError, TypeError):
             # Daca conversia esueaza (valoare non-numerica), revenim la default
