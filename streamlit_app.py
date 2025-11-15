@@ -85,7 +85,6 @@ with st.sidebar:
 
                     new_form_data = {} 
                     if 'date_input' in data:
-                        # Logica de preluare date: 'date_input' ar trebui sa contina valorile
                         source_data = data['date_input']
                              
                         for k in all_keys:
@@ -110,8 +109,8 @@ with st.sidebar:
                     st.subheader("Date Analiza Brute (Firebase - Debugging)")
                     st.json(data) 
 
-                    # 4. PASUL CRITIC: Oprim scriptul curent si il repornim
-                    st.experimental_rerun() 
+                    # 4. PASUL CRITIC: Oprim scriptul curent si il repornim, folosind sintaxa stabila
+                    st.rerun() 
                     
                 else:
                     st.error(f"❌ EROARE CRITICA: S-a selectat ID-ul `{safe_selected_id}`, dar documentul nu a putut fi găsit/încărcat (funcția load_analysis_data a returnat None).")
