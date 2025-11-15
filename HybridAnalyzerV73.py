@@ -15,6 +15,8 @@ db = None
 try:
     import firebase_admin
     from firebase_admin import credentials, firestore
+    # Preluam Timestamp din firestore, esential pentru salvare
+    from firebase_admin.firestore import SERVER_TIMESTAMP
 except ImportError:
     pass
 
@@ -26,12 +28,16 @@ def initialize_firebase():
         return True # Deja initializat
 
     try:
+        # Verificam daca importul bibliotecii a reusit si daca exista secretele
+        if 'firebase_admin' not in globals():
+            st.warning("⚠️ Biblioteca 'firebase-admin' nu este instalată. Verificați requirements.txt.")
+            return False
+            
         if "firestore_creds" in st.secrets:
             # Use st.secrets for secure Streamlit Cloud deployment
             cred = credentials.Certificate(dict(st.secrets["firestore_creds"]))
         else:
             # Daca secretele lipsesc, dezactivam functionalitatea
-            # In deploy-ul public, acest mesaj va aparea daca nu se introduc secretele
             st.warning("⚠️ Credențialele Firebase ('firestore_creds') nu sunt găsite în st.secrets. Funcționalitatea Firebase este dezactivată.")
             return False
 
@@ -43,8 +49,8 @@ def initialize_firebase():
             return True
             
     except Exception as e:
-        # st.error(f"❌ Eroare la inițializarea Firebase: {e}") 
-        # Dezactivat pentru a nu bloca aplicatia daca e o eroare non-critica
+        # Păstrăm funcționalitatea dezactivată dar afișăm o eroare în consolă
+        print(f"❌ Eroare la inițializarea Firebase: {e}") 
         return False
 
 # Attempt to initialize Firebase when the script loads
@@ -63,7 +69,6 @@ def calculate_kld_bidimensional(
     ) -> (str, float):
     """
     Calculează Decizia Finală KLD Bidimensional V7.3.
-    (Logica ramane aceeasi ca in versiunea anterioara)
     """
     
     avg_kld = (kld_total + kld_handicap) / 2
@@ -125,33 +130,36 @@ def calculate_kld_bidimensional(
 def run_hybrid_analyzer(data: dict) -> (str, dict):
     """
     Ruleaza Analiza Hibrid V7.3 pe baza datelor de input.
-    (Logica ramane aceeasi ca in versiunea anterioara)
     """
     
     # --- 1. Data Cleaning and Preparation ---
     try:
+        # Extragem cheile pentru a popula structurile interne
         tp_lines = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
         tp_data = {}
         for line in tp_lines:
             tp_data[line] = {
-                'line': data[f'tp_line_{line}'],
-                'open_over': data[f'tp_open_over_{line}'],
-                'close_over': data[f'tp_close_over_{line}'],
-                'open_under': data[f'tp_open_under_{line}'],
-                'close_under': data[f'tp_close_under_{line}']
+                # Ne asiguram ca valorile sunt convertite la float si ca lipsa lor nu da eroare
+                'line': data.get(f'tp_line_{line}', 0.0),
+                'open_over': data.get(f'tp_open_over_{line}', 1.0),
+                'close_over': data.get(f'tp_close_over_{line}', 1.0),
+                'open_under': data.get(f'tp_open_under_{line}', 1.0),
+                'close_under': data.get(f'tp_close_under_{line}', 1.0)
             }
         
+        # Historical Open Line 
         historical_open_line = data.get('tp_line_open_hist', tp_data['close']['line']) 
         
+        # Handicap Data (HD)
         hd_lines = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
         hd_data = {}
         for line in hd_lines:
             hd_data[line] = {
-                'line': data[f'hd_line_{line}'],
-                'open_home': data[f'hd_open_home_{line}'],
-                'close_home': data[f'hd_close_home_{line}'],
-                'open_away': data[f'hd_open_away_{line}'],
-                'close_away': data[f'hd_close_away_{line}']
+                'line': data.get(f'hd_line_{line}', 0.0),
+                'open_home': data.get(f'hd_open_home_{line}', 1.0),
+                'close_home': data.get(f'hd_close_home_{line}', 1.0),
+                'open_away': data.get(f'hd_open_away_{line}', 1.0),
+                'close_away': data.get(f'hd_close_away_{line}', 1.0)
             }
         
     except Exception as e:
@@ -171,13 +179,10 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         consensus_line_change = 0.0
 
     if consensus_direction == "OVER":
-        line_change_side = "Over"
         line_change_coeff = 1.0
     elif consensus_direction == "UNDER":
-        line_change_side = "Under"
         line_change_coeff = -1.0
     else:
-        line_change_side = "Stable"
         line_change_coeff = 0.0
         
     # --- 3. KLD (Kullback-Leibler Divergence) Calculation ---
@@ -258,15 +263,14 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
     # --- 5. Final Output Generation ---
     final_line = initial_line_tp
     
-    # Determine the final line and odd
     if final_bet_direction == "OVER":
-        final_odd = tp_data['close']['close_over']
+        final_odd = data_tp['close']['close_over'] # Am schimbat data_tp[close] cu data_tp['close']
         if kld_action.startswith("INVERT") or kld_action.startswith("OVERRIDE"):
             buffered_line = final_line + buffer_value
         else:
             buffered_line = final_line - buffer_value
     elif final_bet_direction == "UNDER":
-        final_odd = tp_data['close']['close_under']
+        final_odd = data_tp['close']['close_under']
         if kld_action.startswith("INVERT") or kld_action.startswith("OVERRIDE"):
             buffered_line = final_line - buffer_value
         else:
@@ -276,17 +280,17 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         final_odd = 0.0
         buffer_value = 0.0
         
-    # --- Formatting the Final Report (Markdown is the same) ---
+    # --- Formatting the Final Report ---
     
     output_markdown = f"""
-## 📊 Raport Analiză Hibrid V7.3 - {data['liga']}
-### 📜 Meci: **{data['echipa_gazda']} vs {data['echipa_oaspete']}**
+## 📊 Raport Analiză Hibrid V7.3 - {data.get('liga', 'N/A')}
+### 📜 Meci: **{data.get('echipa_gazda', 'N/A')} vs {data.get('echipa_oaspete', 'N/A')}**
 
 ---
 
 ### 1. 🔍 Sumar Mișcare de Linie (Consensus)
-* Linie Open Istorică: **{historical_open_line}**
-* Linie Close (Curentă): **{initial_line_tp}**
+* Linie Open Istorică: **{historical_open_line:.1f}**
+* Linie Close (Curentă): **{initial_line_tp:.1f}**
 * Diferență: **{consensus_line_change:.2f} puncte**
 * **Consensusul Pieței:** Piața a împins linia spre **{consensus_direction}** (Linia a mers {('JOS' if consensus_direction == 'OVER' else 'SUS')}).
 * Cota de Referință (Close): **{final_odd if final_odd != 0.0 else 'N/A'}**
@@ -319,7 +323,7 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
 ### 4. ✅ PROPUNEREA DE PARIU (Total Points)
 
 * **Direcția Propusă:** **{final_bet_direction}**
-* **Linia Originală:** **{final_line}**
+* **Linia Originală:** **{final_line:.1f}**
 * **Linia Bufferată V7.3:** **{buffered_line:.2f}**
 * **Cota de Referință:** **{final_odd if final_odd != 0.0 else 'N/A'}**
 
@@ -328,10 +332,10 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
     
     # Data structure for saving to Firebase
     result_data = {
-        'liga': data['liga'],
-        'gazda': data['echipa_gazda'],
-        'oaspete': data['echipa_oaspete'],
-        'date_input': data,
+        'liga': data.get('liga'),
+        'gazda': data.get('echipa_gazda'),
+        'oaspete': data.get('echipa_oaspete'),
+        'date_input': data, # Salvam toate datele de input pentru reincarcare!
         'kld_total': final_kld_total,
         'kld_handicap': final_kld_handicap,
         'consensus_direction': consensus_direction,
@@ -342,7 +346,7 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         'buffered_line': buffered_line,
         'reference_odd': final_odd,
         'analysis_markdown': output_markdown,
-        'timestamp': firestore.SERVER_TIMESTAMP if FIREBASE_ENABLED else None
+        'timestamp': SERVER_TIMESTAMP if FIREBASE_ENABLED and 'SERVER_TIMESTAMP' in globals() else pd.Timestamp.now().strftime('%Y%m%d%H%M%S')
     }
     
     return output_markdown, result_data
@@ -356,8 +360,9 @@ def save_to_firebase(data: dict) -> bool:
         return False
         
     try:
-        # Creeaza un document name bazat pe detalii
-        doc_name = f"{data['liga']}-{data['gazda']}-vs-{data['oaspete']}-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
+        # Creeaza un document name bazat pe detalii si timestamp (daca lipseste din data)
+        timestamp_str = data.get('timestamp') if isinstance(data.get('timestamp'), str) else pd.Timestamp.now().strftime('%Y%m%d%H%M%S')
+        doc_name = f"{data.get('liga', 'L')}-{data.get('gazda', 'G')}-vs-{data.get('oaspete', 'O')}-{timestamp_str}"
         doc_name = doc_name.replace(" ", "_").replace("/", "-")
         
         db.collection(COLLECTION_NAME_NBA).document(doc_name).set(data)
@@ -367,7 +372,7 @@ def save_to_firebase(data: dict) -> bool:
         st.error(f"❌ Eroare la salvarea în Firestore: {e}")
         return False
 
-# --- Firebase Load Functions (Numele corectate pentru import) ---
+# --- Firebase Load Functions ---
 
 def load_analysis_ids():
     """Fetches all document IDs from the configured collection."""
@@ -375,7 +380,8 @@ def load_analysis_ids():
         return ["Firebase Dezactivat"]
         
     try:
-        docs = db.collection(COLLECTION_NAME_NBA).list_documents()
+        # Folosim order_by si limit pentru a pastra lista scurta si relevanta
+        docs = db.collection(COLLECTION_NAME_NBA).order_by('timestamp', direction=firestore.Query.DESCENDING).limit(100).stream()
         ids = [doc.id for doc in docs]
         return ids
     except Exception as e:
