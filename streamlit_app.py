@@ -13,24 +13,29 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Inițializare Firebase
+# Inițializare Firebase corectată pentru firestore_creds
 def init_firebase():
     try:
         if not firebase_admin._apps:
+            # Folosește structura ta cu firestore_creds
+            firestore_creds = st.secrets["firestore_creds"]
+            
             cred_dict = {
-                "type": st.secrets["firebase"]["type"],
-                "project_id": st.secrets["firebase"]["project_id"],
-                "private_key_id": st.secrets["firebase"]["private_key_id"],
-                "private_key": st.secrets["firebase"]["private_key"].replace('\\n', '\n'),
-                "client_email": st.secrets["firebase"]["client_email"],
-                "client_id": st.secrets["firebase"]["client_id"],
-                "auth_uri": st.secrets["firebase"]["auth_uri"],
-                "token_uri": st.secrets["firebase"]["token_uri"],
-                "auth_provider_x509_cert_url": st.secrets["firebase"]["auth_provider_x509_cert_url"],
-                "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"]
+                "type": firestore_creds["type"],
+                "project_id": firestore_creds["project_id"],
+                "private_key_id": firestore_creds["private_key_id"],
+                "private_key": firestore_creds["private_key"].replace('\\n', '\n'),
+                "client_email": firestore_creds["client_email"],
+                "client_id": firestore_creds["client_id"],
+                "auth_uri": firestore_creds["auth_uri"],
+                "token_uri": firestore_creds["token_uri"],
+                "auth_provider_x509_cert_url": firestore_creds["auth_provider_x509_cert_url"],
+                "client_x509_cert_url": firestore_creds["client_x509_cert_url"]
             }
+            
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
+            st.success("✅ Firebase inițializat cu succes!")
         return firestore.client()
     except Exception as e:
         st.error(f"Eroare inițializare Firebase: {e}")
