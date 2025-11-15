@@ -14,7 +14,6 @@ from HybridAnalyzerV73 import (
 st.set_page_config(layout="wide", page_title="Hybrid Analyzer V7.3")
 
 # --- LINIA DE DEBUGGING PENTRU PORNIRE ---
-# Se afiseaza o singura data la inceputul rularii
 if not st.session_state.get('app_started', False):
     st.info("Aplicatia a pornit. Verificam starea Firebase...")
     st.session_state['app_started'] = True
@@ -51,40 +50,34 @@ if 'result_data' not in st.session_state:
 # Sursa unica de adevar pentru inputuri
 if 'form_data' not in st.session_state:
     st.session_state['form_data'] = DEFAULT_FORM_DATA.copy()
+    
+# NOU: Cheia de Rerulare (Reset Key)
+if 'rerun_key_suffix' not in st.session_state:
+    st.session_state['rerun_key_suffix'] = 0
 
 
-# --- 3. Functie Ajutatoare pentru Populare Formular (VERSIUNE FINALĂ ROBUSTĂ) ---
+# --- 3. Functie Ajutatoare pentru Populare Formular ---
 def get_value(key):
     """
     Returneaza valoarea din starea sesiunii, garantand tipul de date corect.
-    Acest bloc este crucial pentru a preveni 'AttributeError' la st.number_input.
     """
     
     default_val = DEFAULT_FORM_DATA.get(key)
-    # Folosim .get() pentru a prelua valoarea, care poate fi None daca nu exista
     val = st.session_state['form_data'].get(key)
     
-    # 1. Daca valoarea este None, goala, sau un string "None"
     if val is None or val == '' or str(val).lower() == 'none':
         return default_val
     
-    # 2. Gestiunea Tipului Numeric (cea mai frecventa sursa de AttributeError)
     if isinstance(default_val, (float, int)):
         try:
-            # Foarte important: Fortam totul la float standard Python
-            # Acesta rezolva problema cu tipurile de date din Streamlit / Firebase
+            # Fortam totul la float standard Python
             return float(val) 
         except (ValueError, TypeError):
-            # Daca conversia esueaza (e.g., valoarea e un string non-numeric din greseala),
-            # revenim la valoarea implicita (float)
             return default_val
             
-    # 3. Gestiunea String-urilor
     if isinstance(default_val, str):
         return str(val)
         
-    # 4. Fallback (daca nu e nici numeric, nici string)
-    # Acest fallback e util daca data_input contine o cheie necunoscuta sau un tip complex
     return val if val is not None else default_val
 
 
@@ -112,10 +105,12 @@ with st.sidebar:
                     new_form_data = DEFAULT_FORM_DATA.copy()
                     
                     if 'date_input' in data:
-                        # Fuzionam datele. get_value va gestiona curatarea tipurilor non-standard
                         new_form_data.update(data['date_input'])
                     
                     st.session_state['form_data'] = new_form_data
+                    
+                    # NOU: INSCREMENTAM CHEIA PENTRU A FORȚA RE-RENDERIZAREA
+                    st.session_state['rerun_key_suffix'] += 1
                     
                     st.session_state['analysis_output'] = data.get('analysis_markdown', "Raportul formatat nu a fost gasit in datele salvate.")
                     st.session_state['result_data'] = data
@@ -123,27 +118,26 @@ with st.sidebar:
                     st.subheader("Date Analiza Brute (Firebase)")
                     st.json(data)
                     
-                    # BLOC DE VERIFICARE TIPURI DE DATE CRITICAL (Acesta izoleaza problema)
+                    # BLOC DE VERIFICARE TIPURI DE DATE CRITICAL
                     st.markdown("---")
                     st.subheader("🔎 Verificare Tipuri de Date (DEBUG)")
                     all_good = True
-                    for k, v in st.session_state['form_data'].items():
-                        # Excludem cheile de tip string, ne concentram pe numerice
-                        if k not in ['liga', 'echipa_gazda', 'echipa_oaspete']: 
-                            # Cautam tipuri care nu sunt float sau int
-                            if not isinstance(v, (float, int)):
-                                st.error(f"❌ Tip de date Ilegal: Cheia `{k}` are valoarea `{v}` de tip `{type(v)}`. Ar trebui sa fie float/int.")
-                                all_good = False
-                            else:
-                                pass # Afisam doar erorile
                     
-                    # Daca toate tipurile de date sunt corecte, abia atunci rulam din nou
+                    for k, v in st.session_state['form_data'].items():
+                        if k not in ['liga', 'echipa_gazda', 'echipa_oaspete']:
+                            try:
+                                # Forțăm conversia la float nativ Python
+                                st.session_state['form_data'][k] = float(v)
+                            except Exception as e:
+                                st.error(f"❌ Eșec Conversie: Cheia `{k}` (Tip: `{type(v)}`) nu poate fi convertită la float. Eroare: {e}")
+                                all_good = False
+                                break
+                    
                     if all_good:
-                        st.info("Toate tipurile de date numerice sunt corecte. Rulam din nou...")
-                        # CORECTIA ESTE AICI: st.experimental_rerun() -> st.rerun()
+                        st.info("Toate tipurile de date numerice au fost curățate. Rulam din nou...")
                         st.rerun() 
                     else:
-                        st.warning("⚠️ S-au detectat erori de tip de date. Rerun blocat. Corectati manual valorile inainte de a rula analiza.")
+                        st.warning("⚠️ Erorile de conversie de tip de date blochează rularea.")
                     
                 else:
                     st.error("Nu s-au putut incarca datele pentru ID-ul selectat.")
@@ -157,6 +151,8 @@ with st.sidebar:
 st.title("🏀 Hybrid Analyzer V7.3 - Analiza Baschet")
 st.markdown("Introduceti cotele de deschidere (Open) si inchidere (Close) pentru 7 linii adiacente.")
 
+current_key_suffix = str(st.session_state['rerun_key_suffix'])
+
 
 # --- Formular de Input ---
 with st.form(key='hybrid_analysis_form'):
@@ -165,6 +161,7 @@ with st.form(key='hybrid_analysis_form'):
     col_liga, col_gazda, col_oaspete = st.columns(3)
     
     # Detalii Meci
+    # Cheile de string sunt lăsate simple (nu necesită reset key)
     liga = col_liga.text_input("Liga", value=get_value('liga'), key='liga')
     echipa_gazda = col_gazda.text_input("Echipa Gazda", value=get_value('echipa_gazda'), key='echipa_gazda')
     echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", value=get_value('echipa_oaspete'), key='echipa_oaspete')
@@ -191,9 +188,9 @@ with st.form(key='hybrid_analysis_form'):
     col_open_hist, _ = st.columns([1, 5])
     
     key_hist = 'tp_line_open_hist'
-    # Folosind get_value(), Streamlit primeste garantat un float
     tp_line_open_hist = col_open_hist.number_input("Open Istoric", min_value=150.0, max_value=300.0, 
-                                                  value=get_value(key_hist), step=0.5, format="%.1f", key=key_hist)
+                                                  value=get_value(key_hist), step=0.5, format="%.1f", 
+                                                  key=key_hist + current_key_suffix) # ADAUGARE SUFIX
     data_input[key_hist] = tp_line_open_hist
     st.markdown("---")
 
@@ -206,17 +203,22 @@ with st.form(key='hybrid_analysis_form'):
         
         col1.markdown(f"**{label}**")
         
-        # Aici sunt multiple number_input, protejate de get_value
+        # TOATE CÂMPURILE TP AU ACUM SUFIXUL DE CHEIE
         data_input[f'tp_line_{key}'] = col2.number_input("", min_value=150.0, max_value=300.0, 
-                                                          value=get_value(f'tp_line_{key}'), step=0.5, format="%.1f", key=f'tp_line_{key}')
+                                                          value=get_value(f'tp_line_{key}'), step=0.5, format="%.1f", 
+                                                          key=f'tp_line_{key}' + current_key_suffix) 
         data_input[f'tp_open_over_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
-                                                               value=get_value(f'tp_open_over_{key}'), step=0.01, format="%.2f", key=f'tp_open_over_{key}')
+                                                               value=get_value(f'tp_open_over_{key}'), step=0.01, format="%.2f", 
+                                                               key=f'tp_open_over_{key}' + current_key_suffix)
         data_input[f'tp_close_over_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'tp_close_over_{key}'), step=0.01, format="%.2f", key=f'tp_close_over_{key}')
+                                                                value=get_value(f'tp_close_over_{key}'), step=0.01, format="%.2f", 
+                                                                key=f'tp_close_over_{key}' + current_key_suffix)
         data_input[f'tp_open_under_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'tp_open_under_{key}'), step=0.01, format="%.2f", key=f'tp_open_under_{key}')
+                                                                value=get_value(f'tp_open_under_{key}'), step=0.01, format="%.2f", 
+                                                                key=f'tp_open_under_{key}' + current_key_suffix)
         data_input[f'tp_close_under_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
-                                                                 value=get_value(f'tp_close_under_{key}'), step=0.01, format="%.2f", key=f'tp_close_under_{key}')
+                                                                 value=get_value(f'tp_close_under_{key}'), step=0.01, format="%.2f", 
+                                                                 key=f'tp_close_under_{key}' + current_key_suffix)
 
     st.markdown("---")
 
@@ -239,21 +241,24 @@ with st.form(key='hybrid_analysis_form'):
         col1, col2, col3, col4, col5, col6 = st.columns(6)
         
         col1.markdown(f"**{label}**")
-        # Valoarea liniei (ex: -5.0)
+        # TOATE CÂMPURILE HD AU ACUM SUFIXUL DE CHEIE
         data_input[f'hd_line_{key}'] = col2.number_input("", min_value=-20.0, max_value=20.0, 
-                                                          value=get_value(f'hd_line_{key}'), step=0.5, format="%.1f", key=f'hd_line_{key}')
+                                                          value=get_value(f'hd_line_{key}'), step=0.5, format="%.1f", 
+                                                          key=f'hd_line_{key}' + current_key_suffix)
         
-        # Home (Gazda)
         data_input[f'hd_open_home_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
-                                                               value=get_value(f'hd_open_home_{key}'), step=0.01, format="%.2f", key=f'hd_open_home_{key}')
+                                                               value=get_value(f'hd_open_home_{key}'), step=0.01, format="%.2f", 
+                                                               key=f'hd_open_home_{key}' + current_key_suffix)
         data_input[f'hd_close_home_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'hd_close_home_{key}'), step=0.01, format="%.2f", key=f'hd_close_home_{key}')
+                                                                value=get_value(f'hd_close_home_{key}'), step=0.01, format="%.2f", 
+                                                                key=f'hd_close_home_{key}' + current_key_suffix)
         
-        # Away (Oaspete)
         data_input[f'hd_open_away_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'hd_open_away_{key}'), step=0.01, format="%.2f", key=f'hd_open_away_{key}')
+                                                                value=get_value(f'hd_open_away_{key}'), step=0.01, format="%.2f", 
+                                                                key=f'hd_open_away_{key}' + current_key_suffix)
         data_input[f'hd_close_away_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
-                                                                 value=get_value(f'hd_close_away_{key}'), step=0.01, format="%.2f", key=f'hd_close_away_{key}')
+                                                                 value=get_value(f'hd_close_away_{key}'), step=0.01, format="%.2f", 
+                                                                 key=f'hd_close_away_{key}' + current_key_suffix)
     
     st.markdown("---")
     
