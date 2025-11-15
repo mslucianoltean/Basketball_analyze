@@ -1,0 +1,13 @@
+# Exclude Streamlit secrets to prevent exposing credentials
+.streamlit/secrets.toml
+
+# Exclude Python virtual environment directory
+.venv/
+venv/
+
+# Exclude temporary and build files
+__pycache__/
+*.pyc
+*.log
+dist/
+build/
