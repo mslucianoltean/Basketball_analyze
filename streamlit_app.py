@@ -13,31 +13,25 @@ from HybridAnalyzerV73 import (
 
 st.set_page_config(layout="wide", page_title="Hybrid Analyzer V7.3")
 
-# --- LINIA DE DEBUGGING PENTRU PORNIRE ---
-if not st.session_state.get('app_started', False):
-    st.info("Aplicatia a pornit. Verificam starea Firebase...")
-    st.session_state['app_started'] = True
-# ------------------------------------------
-
-# --- 1. Initializare Valori Implicite COMPLETE ---
+# --- 1. Initializare Valori Implicite COMPLETE (Toate ca STRING-uri) ---
 DEFAULT_FORM_DATA = {
     'liga': "NBA", 'echipa_gazda': "Lakers", 'echipa_oaspete': "Celtics",
-    'tp_line_open_hist': 220.5,
+    'tp_line_open_hist': "220.5", 
 }
 
-# Adaugam valorile implicite pentru cele 7 linii TP si 7 linii HD (ca float)
+# Adaugam valorile implicite pentru cele 7 linii TP si 7 linii HD (ca STRING)
 for key in ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']:
-    DEFAULT_FORM_DATA[f'tp_line_{key}'] = 220.0
-    DEFAULT_FORM_DATA[f'tp_open_over_{key}'] = 1.90
-    DEFAULT_FORM_DATA[f'tp_close_over_{key}'] = 1.95
-    DEFAULT_FORM_DATA[f'tp_open_under_{key}'] = 1.90
-    DEFAULT_FORM_DATA[f'tp_close_under_{key}'] = 1.85
+    DEFAULT_FORM_DATA[f'tp_line_{key}'] = "220.0"
+    DEFAULT_FORM_DATA[f'tp_open_over_{key}'] = "1.90"
+    DEFAULT_FORM_DATA[f'tp_close_over_{key}'] = "1.95"
+    DEFAULT_FORM_DATA[f'tp_open_under_{key}'] = "1.90"
+    DEFAULT_FORM_DATA[f'tp_close_under_{key}'] = "1.85"
     
-    DEFAULT_FORM_DATA[f'hd_line_{key}'] = -5.0
-    DEFAULT_FORM_DATA[f'hd_open_home_{key}'] = 1.90
-    DEFAULT_FORM_DATA[f'hd_close_home_{key}'] = 1.95
-    DEFAULT_FORM_DATA[f'hd_open_away_{key}'] = 1.90
-    DEFAULT_FORM_DATA[f'hd_close_away_{key}'] = 1.85
+    DEFAULT_FORM_DATA[f'hd_line_{key}'] = "-5.0"
+    DEFAULT_FORM_DATA[f'hd_open_home_{key}'] = "1.90"
+    DEFAULT_FORM_DATA[f'hd_close_home_{key}'] = "1.95"
+    DEFAULT_FORM_DATA[f'hd_open_away_{key}'] = "1.90"
+    DEFAULT_FORM_DATA[f'hd_close_away_{key}'] = "1.85"
 
 
 # --- 2. Initializare Stare Streamlit ---
@@ -51,35 +45,34 @@ if 'result_data' not in st.session_state:
 if 'form_data' not in st.session_state:
     st.session_state['form_data'] = DEFAULT_FORM_DATA.copy()
     
-# NOU: Cheia de Rerulare (Reset Key)
-if 'rerun_key_suffix' not in st.session_state:
-    st.session_state['rerun_key_suffix'] = 0
-
 # --- 3. Functie Ajutatoare pentru Populare Formular ---
 def get_value(key):
     """
-    Returneaza valoarea din starea sesiunii, garantand tipul de date corect.
-    Foloseste exclusiv st.session_state['form_data'] ca sursă de adevăr.
+    Returneaza valoarea din starea sesiunii ca STRING (sau valoarea implicita).
     """
+    val = st.session_state['form_data'].get(key)
+    if val is None or str(val).lower() == 'none':
+        return DEFAULT_FORM_DATA.get(key, "")
+    return str(val)
+
+
+# --- 4. Functie pentru Conversia la Rulare (String -> Float) ---
+def convert_and_run(data_input_str):
+    """Convertește inputurile string în float și rulează analiza."""
+    data_input_float = {}
     
-    default_val = DEFAULT_FORM_DATA.get(key)
-    val = st.session_state['form_data'].get(key) 
-    
-    if val is None or val == '' or str(val).lower() == 'none':
-        return default_val
-    
-    # Pentru tipuri numerice (float/int), forțăm float nativ Python
-    if isinstance(default_val, (float, int)):
-        try:
-            return float(val) 
-        except (ValueError, TypeError):
-            return default_val
-            
-    # Pentru string-uri, returnăm valoarea direct din form_data
-    if isinstance(default_val, str):
-        return str(val)
-        
-    return val if val is not None else default_val
+    for k, v in data_input_str.items():
+        if k in ['liga', 'echipa_gazda', 'echipa_oaspete']:
+            data_input_float[k] = v
+        else:
+            try:
+                # Folosim .strip() pentru a elimina spațiile și convertim
+                data_input_float[k] = float(v.strip()) 
+            except ValueError:
+                st.error(f"❌ Eroare de formatare: Valoarea '{v}' pentru '{k}' nu este un număr valid. Va rugam corectati.")
+                return None, None
+                
+    return run_hybrid_analyzer(data_input_float)
 
 
 # --- Bara Laterala (Sidebar) ---
@@ -98,80 +91,61 @@ with st.sidebar:
         )
 
         if st.button("Incarca Analiza pentru Reanaliza"):
-            if selected_id and selected_id != "Firebase Dezactivat" and selected_id != "Eroare la Incarcare":
+            if selected_id and selected_id not in ["Firebase Dezactivat", "Eroare la Incarcare"]:
                 data = load_analysis_data(selected_id)
                 if data:
-                    st.success(f"Analiza `{selected_id}` incarcata. Datele au populat formularul principal.")
+                    st.success(f"Analiza `{selected_id}` incarcata. Datele populeaza formularul principal...")
                     
                     new_form_data = DEFAULT_FORM_DATA.copy()
                     
                     if 'date_input' in data:
-                        new_form_data.update(data['date_input'])
+                        # 1. ACTUALIZARE FORM_DATA cu valori STRING
+                        for k in DEFAULT_FORM_DATA.keys():
+                            # Ne asiguram ca nu avem erori chiar daca datele sunt vechi (cheia lipseste)
+                            v = data['date_input'].get(k)
+                            if v is not None:
+                                new_form_data[k] = str(v)
                     
-                    # 1. ACTUALIZARE FORM_DATA (Sursa de adevar)
+                    # 2. ACTUALIZARE STARE (Sursa de adevar)
                     st.session_state['form_data'] = new_form_data
                     
-                    # 2. INCREMENTAM CHEIA PENTRU A FORȚA RE-RENDERIZAREA
-                    st.session_state['rerun_key_suffix'] += 1
-                    
-                    st.session_state['analysis_output'] = data.get('analysis_markdown', "Raportul formatat nu a fost gasit in datele salvate.")
+                    # 3. ACTUALIZARE RAPORT
+                    # Mesaj clar dacă raportul lipsește (meci salvat înainte de actualizare)
+                    markdown_output = data.get('analysis_markdown', "⚠️ Raport Detaliat Lipsă: Acest document a fost salvat înainte de ultima actualizare. Repopularea a fost efectuată. Rulați analiza pentru a genera raportul nou.")
+                    st.session_state['analysis_output'] = markdown_output
                     st.session_state['result_data'] = data
                     
                     st.subheader("Date Analiza Brute (Firebase)")
                     st.json(data)
                     
-                    # BLOC DE CURATARE TIPURI DE DATE CRITICAL
-                    st.markdown("---")
-                    st.subheader("🔎 Curățare Tipuri de Date (FINAL CHECK)")
-                    all_good = True
-                    
-                    for k, v in st.session_state['form_data'].items():
-                        if k not in ['liga', 'echipa_gazda', 'echipa_oaspete']:
-                            try:
-                                # Fortam conversia la float nativ Python
-                                st.session_state['form_data'][k] = float(v)
-                            except Exception as e:
-                                st.error(f"❌ Eșec Conversie: Cheia `{k}` (Tip: `{type(v)}`) nu poate fi convertită la float. Eroare: {e}")
-                                all_good = False
-                                break
-                    
-                    if all_good:
-                        st.info("Toate tipurile de date numerice au fost curățate. Rulam din nou...")
-                        st.rerun() 
-                    else:
-                        st.warning("⚠️ Erorile de conversie de tip de date blochează rularea.")
+                    # Fortam re-renderizarea pentru a vedea datele in inputuri
+                    st.rerun() 
                     
                 else:
-                    st.error("Nu s-au putut incarca datele pentru ID-ul selectat.")
+                    st.error(f"Nu s-au putut incarca datele pentru ID-ul {selected_id}.")
             else:
                 st.warning("Va rugam sa selectati un ID valid.")
     else:
         st.info("Functionalitatea Firebase este dezactivata (Lipsesc st.secrets).")
+
 
 # --- Pagina Principala ---
 
 st.title("🏀 Hybrid Analyzer V7.3 - Analiza Baschet")
 st.markdown("Introduceti cotele de deschidere (Open) si inchidere (Close) pentru 7 linii adiacente.")
 
-current_key_suffix = str(st.session_state['rerun_key_suffix'])
 
-# --- Formular (ELIMINAT st.form) ---
+# --- Formular (cu text_input pentru stabilitate) ---
 
 st.subheader("Detalii Meci")
 col_liga, col_gazda, col_oaspete = st.columns(3)
 
-# Detalii Meci - Folosim get_value care citeste din form_data
-liga = col_liga.text_input("Liga", 
-                           value=get_value('liga'), 
-                           key='liga')
-echipa_gazda = col_gazda.text_input("Echipa Gazda", 
-                                    value=get_value('echipa_gazda'), 
-                                    key='echipa_gazda')
-echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", 
-                                       value=get_value('echipa_oaspete'), 
-                                       key='echipa_oaspete')
+# Folosim chei statice, get_value aduce STRING-ul din st.session_state['form_data']
+liga = col_liga.text_input("Liga", value=get_value('liga'), key='liga')
+echipa_gazda = col_gazda.text_input("Echipa Gazda", value=get_value('echipa_gazda'), key='echipa_gazda')
+echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", value=get_value('echipa_oaspete'), key='echipa_oaspete')
 
-data_input = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': echipa_oaspete}
+data_input_str = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': echipa_oaspete}
 
 st.markdown("---")
 
@@ -187,16 +161,14 @@ col_h4.markdown("**Over Close**")
 col_h5.markdown("**Under Open**")
 col_h6.markdown("**Under Close**")
 
-# Campul istoric open (V7.3 specific)
+# Campul istoric open
 st.markdown("---")
 st.subheader("Linia Open Istorica")
 col_open_hist, _ = st.columns([1, 5])
 
 key_hist = 'tp_line_open_hist'
-tp_line_open_hist = col_open_hist.number_input("Open Istoric", min_value=150.0, max_value=300.0, 
-                                              value=get_value(key_hist), step=0.5, format="%.1f", 
-                                              key=key_hist + current_key_suffix) 
-data_input[key_hist] = tp_line_open_hist
+tp_line_open_hist = col_open_hist.text_input("Open Istoric", value=get_value(key_hist), key=key_hist) 
+data_input_str[key_hist] = tp_line_open_hist
 st.markdown("---")
 
 tp_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
@@ -208,21 +180,11 @@ for key, label in zip(tp_lines_keys, tp_lines_labels):
     
     col1.markdown(f"**{label}**")
     
-    data_input[f'tp_line_{key}'] = col2.number_input("", min_value=150.0, max_value=300.0, 
-                                                      value=get_value(f'tp_line_{key}'), step=0.5, format="%.1f", 
-                                                      key=f'tp_line_{key}' + current_key_suffix) 
-    data_input[f'tp_open_over_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
-                                                           value=get_value(f'tp_open_over_{key}'), step=0.01, format="%.2f", 
-                                                           key=f'tp_open_over_{key}' + current_key_suffix)
-    data_input[f'tp_close_over_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
-                                                            value=get_value(f'tp_close_over_{key}'), step=0.01, format="%.2f", 
-                                                            key=f'tp_close_over_{key}' + current_key_suffix)
-    data_input[f'tp_open_under_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
-                                                            value=get_value(f'tp_open_under_{key}'), step=0.01, format="%.2f", 
-                                                            key=f'tp_open_under_{key}' + current_key_suffix)
-    data_input[f'tp_close_under_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
-                                                             value=get_value(f'tp_close_under_{key}'), step=0.01, format="%.2f", 
-                                                             key=f'tp_close_under_{key}' + current_key_suffix)
+    data_input_str[f'tp_line_{key}'] = col2.text_input("", value=get_value(f'tp_line_{key}'), key=f'tp_line_{key}') 
+    data_input_str[f'tp_open_over_{key}'] = col3.text_input("", value=get_value(f'tp_open_over_{key}'), key=f'tp_open_over_{key}')
+    data_input_str[f'tp_close_over_{key}'] = col4.text_input("", value=get_value(f'tp_close_over_{key}'), key=f'tp_close_over_{key}')
+    data_input_str[f'tp_open_under_{key}'] = col5.text_input("", value=get_value(f'tp_open_under_{key}'), key=f'tp_open_under_{key}')
+    data_input_str[f'tp_close_under_{key}'] = col6.text_input("", value=get_value(f'tp_close_under_{key}'), key=f'tp_close_under_{key}')
 
 st.markdown("---")
 
@@ -245,37 +207,29 @@ for key, label in zip(hd_lines_keys, tp_lines_labels):
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     col1.markdown(f"**{label}**")
-    data_input[f'hd_line_{key}'] = col2.number_input("", min_value=-20.0, max_value=20.0, 
-                                                      value=get_value(f'hd_line_{key}'), step=0.5, format="%.1f", 
-                                                      key=f'hd_line_{key}' + current_key_suffix)
+    data_input_str[f'hd_line_{key}'] = col2.text_input("", value=get_value(f'hd_line_{key}'), key=f'hd_line_{key}')
     
-    data_input[f'hd_open_home_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
-                                                           value=get_value(f'hd_open_home_{key}'), step=0.01, format="%.2f", 
-                                                           key=f'hd_open_home_{key}' + current_key_suffix)
-    data_input[f'hd_close_home_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
-                                                            value=get_value(f'hd_close_home_{key}'), step=0.01, format="%.2f", 
-                                                            key=f'hd_close_home_{key}' + current_key_suffix)
+    data_input_str[f'hd_open_home_{key}'] = col3.text_input("", value=get_value(f'hd_open_home_{key}'), key=f'hd_open_home_{key}')
+    data_input_str[f'hd_close_home_{key}'] = col4.text_input("", value=get_value(f'hd_close_home_{key}'), key=f'hd_close_home_{key}')
     
-    data_input[f'hd_open_away_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
-                                                            value=get_value(f'hd_open_away_{key}'), step=0.01, format="%.2f", 
-                                                            key=f'hd_open_away_{key}' + current_key_suffix)
-    data_input[f'hd_close_away_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
-                                                             value=get_value(f'hd_close_away_{key}'), step=0.01, format="%.2f", 
-                                                             key=f'hd_close_away_{key}' + current_key_suffix)
+    data_input_str[f'hd_open_away_{key}'] = col5.text_input("", value=get_value(f'hd_open_away_{key}'), key=f'hd_open_away_{key}')
+    data_input_str[f'hd_close_away_{key}'] = col6.text_input("", value=get_value(f'hd_close_away_{key}'), key=f'hd_close_away_{key}')
 
 st.markdown("---")
 
 # Butonul de Rulare
 if st.button("🔥 Ruleaza Analiza Hibrid V7.3"):
     # 1. Salvarea datelor curente in st.session_state (sursa de adevar)
-    st.session_state['form_data'].update(data_input)
+    st.session_state['form_data'].update(data_input_str)
     
-    # 2. Apelam functia principala de analiza
-    markdown_output, result_data = run_hybrid_analyzer(data_input)
+    # 2. Convertim si Rulam
+    markdown_output, result_data = convert_and_run(data_input_str)
     
-    # 3. Salvare in Stare
-    st.session_state['analysis_output'] = markdown_output
-    st.session_state['result_data'] = result_data
+    # 3. Salvare in Stare doar daca rularea a avut succes
+    if markdown_output:
+        st.session_state['analysis_output'] = markdown_output
+        st.session_state['result_data'] = result_data
+
 
 # --- Zona de Rezultate ---
 
@@ -283,10 +237,8 @@ if st.session_state['analysis_output']:
     st.markdown("---")
     st.header("✨ Rezultate Analiza")
     
-    # Afiseaza rezultatul in format Markdown
     st.markdown(st.session_state['analysis_output'])
     
-    # Buton de Salvare
     final_dir = st.session_state['result_data'].get('final_bet_direction')
     
     if FIREBASE_ENABLED and final_dir not in ['SKIP', 'EVAL/SKIP', 'SKIP_DOUBLE_RISK', 'STABLE/SKIP']:
