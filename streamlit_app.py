@@ -1,201 +1,176 @@
 import streamlit as st
-from HybridAnalyzerV73 import HybridAnalyzerV73, save_to_firebase, get_all_match_ids, get_analysis_by_id, FIREBASE_ENABLED, COLLECTION_NAME_NBA
-import numpy as np
+import json
+
+# IMPORTURI CORECTATE: S-a inlocuit 'HybridAnalyzerV73' cu 'run_hybrid_analyzer'
+# si 'get_all_match_ids'/'get_analysis_by_id' cu 'load_analysis_ids'/'load_analysis_data'
+from HybridAnalyzerV73 import (
+    run_hybrid_analyzer, 
+    save_to_firebase, 
+    load_analysis_ids, 
+    load_analysis_data, 
+    FIREBASE_ENABLED, 
+    COLLECTION_NAME_NBA
+)
 
 st.set_page_config(layout="wide", page_title="Hybrid Analyzer V7.3")
 
-# Inițializarea session state
-if 'total_lines' not in st.session_state:
-    st.session_state.total_lines = {}
-if 'handicap_lines' not in st.session_state:
-    st.session_state.handicap_lines = {}
-if 'analyzer' not in st.session_state:
-    st.session_state.analyzer = None
+# --- Initializare Stare ---
+if 'analysis_output' not in st.session_state:
+    st.session_state['analysis_output'] = ""
+if 'result_data' not in st.session_state:
+    st.session_state['result_data'] = {}
 
 
-# Funcție utilitară pentru a randa inputul de cote
-def render_line_input(market_type, line_key, default_line=None):
-    if market_type == 'TOTAL':
-        key_prefix = 't'
-        title = f"Total Points Line ({line_key})"
-        dir_keys = ('over', 'under')
-        dir_names = ('Over', 'Under')
-    else:
-        key_prefix = 'h'
-        title = f"Handicap Line ({line_key})"
-        dir_keys = ('home', 'away')
-        dir_names = ('Home', 'Away')
-    
-    st.subheader(f"Linia {title}")
-    
-    col1, col2, col3 = st.columns([1, 1, 1])
+# --- Bara Laterala (Sidebar) ---
 
-    # 1. Valoarea Liniei
-    line_value = col1.number_input("Valoarea Liniei", value=default_line or 0.0, step=0.5, format="%.1f", 
-                                   key=f'{key_prefix}_{line_key}_line')
-    
-    # 2. Open Line Value (doar pentru Close Total)
-    open_line_value = None
-    if market_type == 'TOTAL' and line_key == 'close':
-        open_line_value_str = col2.text_input("Linie Open Istorică (V7.3)", 
-                                              key=f'{key_prefix}_{line_key}_open_line_value', 
-                                              help="Introduceți linia istorică deschisă. Lăsați gol dacă nu este disponibilă.")
-        try:
-            open_line_value = float(open_line_value_str)
-        except ValueError:
-            if open_line_value_str:
-                st.warning("Linia Open Istorică trebuie să fie un număr.")
-            open_line_value = None
-    
-    # 3. Cote Open/Close
-    st.markdown("##### COTE")
-    colA, colB, colC, colD = st.columns(4)
-
-    # Direcția 1 (Over/Home)
-    d1_open = colA.number_input(f"{dir_names[0]} Open", value=1.90, step=0.01, format="%.2f", 
-                                key=f'{key_prefix}_{line_key}_{dir_keys[0]}_open')
-    d1_close = colB.number_input(f"{dir_names[0]} Close", value=1.90, step=0.01, format="%.2f", 
-                                 key=f'{key_prefix}_{line_key}_{dir_keys[0]}_close')
-    
-    # Direcția 2 (Under/Away)
-    d2_open = colC.number_input(f"{dir_names[1]} Open", value=1.90, step=0.01, format="%.2f", 
-                                key=f'{key_prefix}_{line_key}_{dir_keys[1]}_open')
-    d2_close = colD.number_input(f"{dir_names[1]} Close", value=1.90, step=0.01, format="%.2f", 
-                                 key=f'{key_prefix}_{line_key}_{dir_keys[1]}_close')
-    
-    # Salvarea datelor
-    data = {
-        'line': line_value,
-        f'{dir_keys[0]}_open': d1_open,
-        f'{dir_keys[0]}_close': d1_close,
-        f'{dir_keys[1]}_open': d2_open,
-        f'{dir_keys[1]}_close': d2_close
-    }
-    if market_type == 'TOTAL' and line_key == 'close':
-        data['open_line_value'] = open_line_value
-    
-    if market_type == 'TOTAL':
-        st.session_state.total_lines[line_key] = data
-    else:
-        st.session_state.handicap_lines[line_key] = data
-
-
-# Funcție principală de analiză
-def run_analysis(league, home, away, total_lines, handicap_lines):
-    try:
-        analyzer = HybridAnalyzerV73(league.upper(), home.upper(), away.upper(), total_lines, handicap_lines)
-        st.session_state.analyzer = analyzer
-        
-        # Generarea outputului Markdown și salvarea deciziei în obiectul analyzer
-        markdown_output = analyzer.generate_prediction_markdown()
-        
-        # Afișarea rezultatului
-        st.markdown("---")
-        st.markdown("## 📊 Rezultate Analiză Hibrid V7.3")
-        st.markdown(markdown_output, unsafe_allow_html=True)
-        
-        # Afișarea butonului de salvare
-        if analyzer.decision and not analyzer.decision['Decision_Type'].startswith('SKIP') and FIREBASE_ENABLED:
-            if st.button("💾 Salvează Decizia în Firebase", key="save_btn"):
-                st.info(save_to_firebase(analyzer.decision))
-
-    except Exception as e:
-        st.error(f"❌ A apărut o eroare în timpul analizei: {e}")
-        st.exception(e)
-
-
-# --- INTERFAȚA STREAMLIT ---
-
-# Sidebar pentru vizualizarea analizelor salvate
 with st.sidebar:
     st.header("Vizualizează Analize Salvate 📜")
-    
+
     if FIREBASE_ENABLED:
-        match_ids = get_all_match_ids()
-        if match_ids:
-            selected_id = st.selectbox("Selectează ID Analiză", options=[''] + match_ids, key='selected_match_id')
-            
-            if selected_id:
-                if st.button("Încarcă Analiză", key="load_btn"):
-                    analysis_data = get_analysis_by_id(selected_id)
-                    if analysis_data:
-                        # Afișează o versiune simplificată a analizei
-                        st.subheader(f"Analiză: {selected_id}")
-                        st.json(analysis_data)
-                    else:
-                        st.warning("Nu s-au putut încărca datele pentru acest ID.")
-        else:
-            st.info("Nu există analize salvate în Firebase sau colecția este goală.")
+        match_ids = load_analysis_ids()
+        
+        selected_id = st.selectbox(
+            "Selectează ID Analiză:",
+            match_ids,
+            index=None
+        )
+
+        if st.button("Încarcă Analiză"):
+            if selected_id and selected_id != "Firebase Dezactivat" and selected_id != "Eroare la Încărcare":
+                data = load_analysis_data(selected_id)
+                if data:
+                    st.success(f"Analiza `{selected_id}` încărcată.")
+                    
+                    # Afișează datele brute în sidebar
+                    st.subheader("Date Analiză Brute")
+                    # Folosim json.dumps pentru formatare mai lizibila
+                    st.json(data)
+                    
+                    # Afișează raportul formatat in pagina principala
+                    st.session_state['analysis_output'] = data.get('analysis_markdown', "Raportul formatat nu a fost găsit în datele salvate.")
+                    st.session_state['result_data'] = data
+                else:
+                    st.error("Nu s-au putut încărca datele pentru ID-ul selectat.")
+            else:
+                st.warning("Vă rugăm să selectați un ID valid.")
     else:
-        st.warning(f"Firebase dezactivat. Verificați credențialele. Colecție: {COLLECTION_NAME_NBA}")
+        st.info("Funcționalitatea Firebase este dezactivată (Lipsesc st.secrets).")
+
+# --- Pagina Principală ---
+
+st.title("🏀 Hybrid Analyzer V7.3 - Analiză Baschet")
+st.markdown("Introduceți cotele de deschidere (Open) și închidere (Close) pentru 7 linii adiacente.")
 
 
-# Pagina principală
-st.title("🏀 Hybrid Analyzer V7.3 - Instrument de Analiză Baschet")
-st.markdown("### Introduceți datele pentru 7 linii de cote (Open/Close) pentru a rula analiza Hibrid V7.3.")
+# --- Formular de Input ---
+with st.form(key='hybrid_analysis_form'):
+    
+    st.subheader("Detalii Meci")
+    col_liga, col_gazda, col_oaspete = st.columns(3)
+    
+    liga = col_liga.text_input("Liga", "NBA")
+    echipa_gazda = col_gazda.text_input("Echipa Gazdă", "Lakers")
+    echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", "Celtics")
 
-with st.form("input_form"):
-    
-    st.header("1. Detalii Meci")
-    col1, col2, col3 = st.columns(3)
-    league = col1.text_input("Liga (ex: NBA)", value="NBA")
-    home_team = col2.text_input("Echipa Gazdă (ex: LAL)", value="HOME")
-    away_team = col3.text_input("Echipa Oaspete (ex: GSW)", value="AWAY")
+    data_input = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': echipa_oaspete}
 
-    # --- INPUT TOTAL POINTS ---
-    st.header("2. Total Puncte - 7 Linii")
-    
-    # Close Line (cu Open Line Istorică)
-    render_line_input('TOTAL', 'close', default_line=220.0)
     st.markdown("---")
     
-    # Minus Lines
-    st.subheader("Linii În Jos (-3, -2, -1)")
-    col_m3, col_m2, col_m1 = st.columns(3)
-    with col_m3: render_line_input('TOTAL', 'm3', default_line=217.0)
-    with col_m2: render_line_input('TOTAL', 'm2', default_line=218.0)
-    with col_m1: render_line_input('TOTAL', 'm1', default_line=219.0)
+    # Coloane pentru introducerea datelor
+    st.subheader("Total Puncte (Over/Under) - 7 Linii")
+    
+    # Header
+    col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns(6)
+    col_h1.markdown("**Linia**")
+    col_h2.markdown("**Valoare**")
+    col_h3.markdown("**Over Open**")
+    col_h4.markdown("**Over Close**")
+    col_h5.markdown("**Under Open**")
+    col_h6.markdown("**Under Close**")
+    
+    # Liniile TP
+    tp_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
+    tp_lines_labels = ['Close Line', '-3 pts (M3)', '-2 pts (M2)', '-1 pts (M1)', '+1 pts (P1)', '+2 pts (P2)', '+3 pts (P3)']
+    
+    # Campul istoric open (V7.3 specific)
+    st.markdown("---")
+    st.subheader("Linia Open Istorică")
+    col_open_hist, _ = st.columns([1, 5])
+    tp_line_open_hist = col_open_hist.number_input("Open Istoric", min_value=150.0, max_value=300.0, value=220.5, step=0.5, format="%.1f")
+    data_input['tp_line_open_hist'] = tp_line_open_hist
+    st.markdown("---")
+
+    for key, label in zip(tp_lines_keys, tp_lines_labels):
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        
+        col1.markdown(f"**{label}**")
+        data_input[f'tp_line_{key}'] = col2.number_input("", min_value=150.0, max_value=300.0, value=220.0, step=0.5, format="%.1f", key=f'tp_val_{key}')
+        data_input[f'tp_open_over_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, value=1.90, step=0.01, format="%.2f", key=f'tp_oo_{key}')
+        data_input[f'tp_close_over_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, value=1.95, step=0.01, format="%.2f", key=f'tp_co_{key}')
+        data_input[f'tp_open_under_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, value=1.90, step=0.01, format="%.2f", key=f'tp_ou_{key}')
+        data_input[f'tp_close_under_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, value=1.85, step=0.01, format="%.2f", key=f'tp_cu_{key}')
+
+    st.markdown("---")
+
+    st.subheader("Handicap (Home/Away) - 7 Linii")
+
+    # Header Handicap
+    col_hh1, col_hh2, col_hh3, col_hh4, col_hh5, col_hh6 = st.columns(6)
+    col_hh1.markdown("**Linia**")
+    col_hh2.markdown("**Valoare**")
+    col_hh3.markdown("**Home Open**")
+    col_hh4.markdown("**Home Close**")
+    col_hh5.markdown("**Away Open**")
+    col_hh6.markdown("**Away Close**")
+
+    # Liniile HD (Cheile sunt identice cu TP)
+    hd_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
+    hd_lines_labels = ['Close Line', '-3 pts (M3)', '-2 pts (M2)', '-1 pts (M1)', '+1 pts (P1)', '+2 pts (P2)', '+3 pts (P3)']
+
+    for key, label in zip(hd_lines_keys, hd_lines_labels):
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        
+        col1.markdown(f"**{label}**")
+        # Valoarea liniei (ex: -5.0)
+        data_input[f'hd_line_{key}'] = col2.number_input("", min_value=-20.0, max_value=20.0, value=-5.0, step=0.5, format="%.1f", key=f'hd_val_{key}')
+        
+        # Home (Gazda)
+        data_input[f'hd_open_home_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, value=1.90, step=0.01, format="%.2f", key=f'hd_ho_{key}')
+        data_input[f'hd_close_home_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, value=1.95, step=0.01, format="%.2f", key=f'hd_hc_{key}')
+        
+        # Away (Oaspete)
+        data_input[f'hd_open_away_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, value=1.90, step=0.01, format="%.2f", key=f'hd_ao_{key}')
+        data_input[f'hd_close_away_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, value=1.85, step=0.01, format="%.2f", key=f'hd_ac_{key}')
+    
     st.markdown("---")
     
-    # Plus Lines
-    st.subheader("Linii În Sus (+1, +2, +3)")
-    col_p1, col_p2, col_p3 = st.columns(3)
-    with col_p1: render_line_input('TOTAL', 'p1', default_line=221.0)
-    with col_p2: render_line_input('TOTAL', 'p2', default_line=222.0)
-    with col_p3: render_line_input('TOTAL', 'p3', default_line=223.0)
-    
-    # --- INPUT HANDICAP ---
-    st.header("3. Handicap - 7 Linii")
-    
-    # Close Line
-    render_line_input('HANDICAP', 'close', default_line=-5.0)
-    st.markdown("---")
-    
-    # Minus Lines (mai spre 0)
-    st.subheader("Linii În Jos (ex: -8, -7, -6)")
-    col_hm3, col_hm2, col_hm1 = st.columns(3)
-    with col_hm3: render_line_input('HANDICAP', 'm3', default_line=-8.0)
-    with col_hm2: render_line_input('HANDICAP', 'm2', default_line=-7.0)
-    with col_hm1: render_line_input('HANDICAP', 'm1', default_line=-6.0)
-    st.markdown("---")
-    
-    # Plus Lines (mai departe de 0)
-    st.subheader("Linii În Sus (ex: -4, -3, -2)")
-    col_hp1, col_hp2, col_hp3 = st.columns(3)
-    with col_hp1: render_line_input('HANDICAP', 'p1', default_line=-4.0)
-    with col_hp2: render_line_input('HANDICAP', 'p2', default_line=-3.0)
-    with col_hp3: render_line_input('HANDICAP', 'p3', default_line=-2.0)
-    
-    
-    # Buton de Analiză
+    # Butonul de Rulare
     submitted = st.form_submit_button("🔥 Rulează Analiza Hibrid V7.3")
 
-if submitted:
-    run_analysis(league, home_team, away_team, st.session_state.total_lines, st.session_state.handicap_lines)
+    if submitted:
+        # Apelam functia principala de analiza
+        markdown_output, result_data = run_hybrid_analyzer(data_input)
+        
+        # Salvare in Stare
+        st.session_state['analysis_output'] = markdown_output
+        st.session_state['result_data'] = result_data
 
-# Afișează analiza curentă dacă există
-if st.session_state.analyzer:
+
+# --- Zona de Rezultate ---
+
+if st.session_state['analysis_output']:
     st.markdown("---")
-    st.markdown("### Analiza Curentă (Vizualizare Detaliată)")
-    # Re-rulăm doar pentru afișare (datele sunt în session_state.analyzer.decision)
-    st.markdown(st.session_state.analyzer.generate_prediction_markdown(), unsafe_allow_html=True)
+    st.header("✨ Rezultate Analiză")
+    
+    # Afiseaza rezultatul in format Markdown
+    st.markdown(st.session_state['analysis_output'])
+    
+    # Buton de Salvare
+    if FIREBASE_ENABLED and st.session_state['result_data'].get('final_bet_direction') not in ['SKIP', 'EVAL/SKIP', 'SKIP_DOUBLE_RISK']:
+        st.markdown("---")
+        if st.button("💾 Salvează Decizia în Firebase"):
+            save_to_firebase(st.session_state['result_data'])
+    elif st.session_state['result_data'].get('final_bet_direction') in ['SKIP', 'EVAL/SKIP', 'SKIP_DOUBLE_RISK']:
+        st.warning("Analiza este un SKIP. Nu se recomandă salvarea sau plasarea unui pariu.")
+    elif not FIREBASE_ENABLED:
+        st.warning("Conexiunea Firebase este dezactivată. Salvarea nu este disponibilă.")
