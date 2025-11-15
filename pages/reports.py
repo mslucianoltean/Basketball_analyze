@@ -14,15 +14,22 @@ if not FIREBASE_ENABLED:
     st.error("Conexiunea Firebase este dezactivată. Nu se pot încărca rapoartele.")
 else:
     # --- Incarcare Date ---
-    # Folosim cache pentru a evita citirea din Firebase la fiecare interacțiune pe pagină
-    @st.cache_data(ttl=60) 
+    # Fără cache pentru a vedea datele noi imediat. Recomandat doar pentru testare/debug.
+    # Dacă vrei cache, folosește @st.cache_data(ttl=60)
+    
     def fetch_data():
         return load_all_analysis_data()
 
-    analysis_data = fetch_data()
+    # Dăm utilizatorului opțiunea de a reseta manual cache-ul
+    if st.button("Reincarca Date (Resetează Cache-ul)") or 'reports_data' not in st.session_state:
+        with st.spinner("Încărcare date din Firebase..."):
+            st.session_state['reports_data'] = load_all_analysis_data()
+        
+    analysis_data = st.session_state.get('reports_data', [])
+
 
     if not analysis_data:
-        st.info("Nu s-au găsit analize salvate.")
+        st.info("Nu s-au găsit analize salvate. Vă rugăm să rulați și să salvați o analiză nouă pe pagina principală.")
     else:
         # Convertim lista de dictionare in DataFrame pentru afisare facila
         df_display = pd.DataFrame(analysis_data)
