@@ -14,14 +14,9 @@ if not FIREBASE_ENABLED:
     st.error("Conexiunea Firebase este dezactivată. Nu se pot încărca rapoartele.")
 else:
     # --- Incarcare Date ---
-    # Fără cache pentru a vedea datele noi imediat. Recomandat doar pentru testare/debug.
-    # Dacă vrei cache, folosește @st.cache_data(ttl=60)
+    # Nu folosim cache pentru a vedea datele noi imediat.
     
-    def fetch_data():
-        return load_all_analysis_data()
-
-    # Dăm utilizatorului opțiunea de a reseta manual cache-ul
-    if st.button("Reincarca Date (Resetează Cache-ul)") or 'reports_data' not in st.session_state:
+    if st.button("Reincarca Date (Citire din Firebase)") or 'reports_data' not in st.session_state:
         with st.spinner("Încărcare date din Firebase..."):
             st.session_state['reports_data'] = load_all_analysis_data()
         
@@ -29,7 +24,7 @@ else:
 
 
     if not analysis_data:
-        st.info("Nu s-au găsit analize salvate. Vă rugăm să rulați și să salvați o analiză nouă pe pagina principală.")
+        st.info("Nu s-au găsit analize salvate. Vă rugăm să rulați și să salvați o analiză nouă pe pagina principală (pentru a avea toate câmpurile necesare).")
     else:
         # Convertim lista de dictionare in DataFrame pentru afisare facila
         df_display = pd.DataFrame(analysis_data)
@@ -68,6 +63,6 @@ else:
                 if report_markdown:
                     st.markdown(report_markdown)
                 else:
-                    st.error("Raportul detaliat (Markdown) nu a fost găsit în datele salvate. Vă rugăm să salvați o analiză nouă pentru a include acest câmp.")
+                    st.error("Raportul detaliat (Markdown) nu a fost găsit. Acesta este un document salvat înainte de actualizare. Vă rugăm să rulați o analiză nouă pentru a o genera.")
             else:
                  st.warning("Eroare la găsirea rândului selectat.")
