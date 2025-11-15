@@ -17,7 +17,6 @@ st.set_page_config(layout="wide", page_title="Hybrid Analyzer V7.3")
 if 'analysis_output' not in st.session_state: st.session_state['analysis_output'] = ""
 if 'result_data' not in st.session_state: st.session_state['result_data'] = {}
 if 'form_data' not in st.session_state: st.session_state['form_data'] = {}
-# SUFIX CRITIC: Se schimba la fiecare incarcare pentru a forta repopularea widget-urilor
 if 'key_suffix' not in st.session_state: st.session_state['key_suffix'] = 0 
     
 # --- 2. Functie Ajutatoare pentru Populare Formular (Returneaza string gol) ---
@@ -25,7 +24,7 @@ def get_value(key):
     """Citeste valoarea din starea sesiunii. Daca lipseste, returneaza string gol."""
     val = st.session_state['form_data'].get(key)
     if val is None or str(val).lower() == 'none':
-        return "" # Returneaza string gol
+        return "" 
     return str(val)
 
 # --- 3. Functie pentru Conversia la Rulare (String -> Float) ---
@@ -73,47 +72,101 @@ with st.sidebar:
                 if data:
                     st.success(f"Analiza `{safe_selected_id}` incarcata. Repopularea urmeaza imediat...")
                     
-                    # Definim TOATE CHEILE PE CARE LE ASTEPTAM
-                    all_keys = [
-                        'liga', 'echipa_gazda', 'echipa_oaspete', 'tp_line_open_hist'
-                    ]
-                    for key_sufix in ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']:
-                        all_keys.extend([
-                            f'tp_line_{key_sufix}', f'tp_open_over_{key_sufix}', f'tp_close_over_{key_sufix}', f'tp_open_under_{key_sufix}', f'tp_close_under_{key_sufix}',
-                            f'hd_line_{key_sufix}', f'hd_open_home_{key_sufix}', f'hd_close_home_{key_sufix}', f'hd_open_away_{key_sufix}', f'hd_close_away_{key_sufix}'
-                        ])
-
                     new_form_data = {} 
-                    if 'date_input' in data:
-                        source_data = data['date_input']
-                             
-                        for k in all_keys:
-                            v = source_data.get(k)
-                            if v is not None:
-                                new_form_data[k] = str(v)
-                    # Adaugam si campurile de baza (liga, gazda, oaspete) care ar putea fi in radacina doc-ului vechi
+
+                    # 1. POPULAREA CAMPURILOR DE BAZA (ACESTEA AU FUNCTIONAT)
                     new_form_data['liga'] = data.get('League', data.get('liga', ''))
                     new_form_data['echipa_gazda'] = data.get('HomeTeam', data.get('echipa_gazda', ''))
                     new_form_data['echipa_oaspete'] = data.get('AwayTeam', data.get('echipa_oaspete', ''))
 
+                    
+                    # 2. POPULAREA COTELOR (LOGICA NOUA DE EXTRACȚIE)
+                    
+                    # Sursa principala: 'date_input' (unde ar trebui sa fie salvate valorile din formular)
+                    source_input = data.get('date_input', {})
+                    # Sursa secundara: structura de linii (daca 'date_input' e incomplet/lipseste)
+                    source_tp = data.get('All_Total_Lines', {})
+                    source_hd = data.get('All_Handicap_Lines', {})
+                    
+                    tp_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
 
-                    # 1. ACTUALIZARE STARE
+                    # Total Puncte
+                    key_hist = 'tp_line_open_hist'
+                    # Prioritate pentru valoarea din 'date_input'
+                    hist_val = source_input.get(key_hist)
+                    # Daca lipseste, incercam sa o deducem din 'All_Total_Lines'['close'] (open_line_value)
+                    if hist_val is None and 'close' in source_tp:
+                         hist_val = source_tp['close'].get('open_line_value')
+
+                    new_form_data[key_hist] = str(hist_val) if hist_val is not None else ""
+
+
+                    for key in tp_lines_keys:
+                        # Reconstruim cheile asa cum sunt in formularul Streamlit
+                        
+                        # --- Total Points (TP) ---
+                        # Linia (Ex: 228.5)
+                        key_tp_line = f'tp_line_{key}'
+                        val_tp_line = source_input.get(key_tp_line) or source_tp.get(key, {}).get('line')
+                        new_form_data[key_tp_line] = str(val_tp_line) if val_tp_line is not None else ""
+
+                        # Open/Close Over/Under
+                        key_tp_open_over = f'tp_open_over_{key}'
+                        val_tp_open_over = source_input.get(key_tp_open_over) or source_tp.get(key, {}).get('over_open')
+                        new_form_data[key_tp_open_over] = str(val_tp_open_over) if val_tp_open_over is not None else ""
+                        
+                        key_tp_close_over = f'tp_close_over_{key}'
+                        val_tp_close_over = source_input.get(key_tp_close_over) or source_tp.get(key, {}).get('over_close')
+                        new_form_data[key_tp_close_over] = str(val_tp_close_over) if val_tp_close_over is not None else ""
+
+                        key_tp_open_under = f'tp_open_under_{key}'
+                        val_tp_open_under = source_input.get(key_tp_open_under) or source_tp.get(key, {}).get('under_open')
+                        new_form_data[key_tp_open_under] = str(val_tp_open_under) if val_tp_open_under is not None else ""
+
+                        key_tp_close_under = f'tp_close_under_{key}'
+                        val_tp_close_under = source_input.get(key_tp_close_under) or source_tp.get(key, {}).get('under_close')
+                        new_form_data[key_tp_close_under] = str(val_tp_close_under) if val_tp_close_under is not None else ""
+
+
+                        # --- Handicap (HD) ---
+                        # Linia (Ex: 1.5)
+                        key_hd_line = f'hd_line_{key}'
+                        val_hd_line = source_input.get(key_hd_line) or source_hd.get(key, {}).get('line')
+                        new_form_data[key_hd_line] = str(val_hd_line) if val_hd_line is not None else ""
+
+                        # Open/Close Home/Away
+                        key_hd_open_home = f'hd_open_home_{key}'
+                        val_hd_open_home = source_input.get(key_hd_open_home) or source_hd.get(key, {}).get('home_open')
+                        new_form_data[key_hd_open_home] = str(val_hd_open_home) if val_hd_open_home is not None else ""
+
+                        key_hd_close_home = f'hd_close_home_{key}'
+                        val_hd_close_home = source_input.get(key_hd_close_home) or source_hd.get(key, {}).get('home_close')
+                        new_form_data[key_hd_close_home] = str(val_hd_close_home) if val_hd_close_home is not None else ""
+
+                        key_hd_open_away = f'hd_open_away_{key}'
+                        val_hd_open_away = source_input.get(key_hd_open_away) or source_hd.get(key, {}).get('away_open')
+                        new_form_data[key_hd_open_away] = str(val_hd_open_away) if val_hd_open_away is not None else ""
+
+                        key_hd_close_away = f'hd_close_away_{key}'
+                        val_hd_close_away = source_input.get(key_hd_close_away) or source_hd.get(key, {}).get('away_close')
+                        new_form_data[key_hd_close_away] = str(val_hd_close_away) if val_hd_close_away is not None else ""
+
+
+                    # 3. ACTUALIZARE STARE ȘI REPORNIRE
                     st.session_state['form_data'] = new_form_data
                     st.session_state['result_data'] = data
                     st.session_state['analysis_output'] = data.get('analysis_markdown', "⚠️ Raport Detaliat Lipsă. Rulați analiza pentru a genera raportul nou.")
 
-                    # 2. INCREMENTARE SUFIX CHEIE CRITICĂ
                     st.session_state['key_suffix'] += 1 
                     
-                    # 3. AFISARE JSON PENTRU DEBUGGING
                     st.subheader("Date Analiza Brute (Firebase - Debugging)")
                     st.json(data) 
 
-                    # 4. PASUL CRITIC: Oprim scriptul curent si il repornim, folosind sintaxa stabila
+                    # Repornirea scriptului forțează widget-urile să folosească noul 'key_suffix'
                     st.rerun() 
                     
                 else:
-                    st.error(f"❌ EROARE CRITICA: S-a selectat ID-ul `{safe_selected_id}`, dar documentul nu a putut fi găsit/încărcat (funcția load_analysis_data a returnat None).")
+                    st.error(f"❌ EROARE CRITICA: S-a selectat ID-ul `{safe_selected_id}`, dar documentul nu a putut fi găsit/încărcat.")
             else:
                 st.warning("Va rugam sa selectati un ID valid.")
     else:
@@ -125,7 +178,7 @@ with st.sidebar:
 st.title("🏀 Hybrid Analyzer V7.3 - Analiza Baschet")
 st.markdown("Introduceti cotele de deschidere (Open) si inchidere (Close) pentru 7 linii adiacente.")
 
-current_suffix = st.session_state['key_suffix'] # Preluam suficsul curent
+current_suffix = st.session_state['key_suffix'] 
 
 st.subheader("Detalii Meci")
 col_liga, col_gazda, col_oaspete = st.columns(3)
@@ -160,7 +213,7 @@ for key, label in zip(tp_lines_keys, tp_lines_labels):
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     col1.markdown(f"**{label}**")
     
-    # Aplicam suficsul la chei TP
+    # Total Points
     key_tp_line = f'tp_line_{key}'
     data_input_str[key_tp_line] = col2.text_input(key_tp_line, value=get_value(key_tp_line), key=f"{key_tp_line}_{current_suffix}", label_visibility="hidden") 
     
@@ -193,7 +246,7 @@ for key, label in zip(hd_lines_keys, tp_lines_labels):
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     col1.markdown(f"**{label}**")
     
-    # Aplicam suficsul la chei Handicap
+    # Handicap
     key_hd_line = f'hd_line_{key}'
     data_input_str[key_hd_line] = col2.text_input(key_hd_line, value=get_value(key_hd_line), key=f"{key_hd_line}_{current_suffix}", label_visibility="hidden")
     
