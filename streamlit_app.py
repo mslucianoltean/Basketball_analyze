@@ -139,11 +139,13 @@ def create_line_inputs(prefix, line_names):
     
     return lines_data
 
-def display_professional_report(result):
+def display_professional_report(result, is_saved_match=False):
     """Afișează raportul profesional complet cu TOATE analizele."""
     
     st.markdown("---")
     st.header("📊 RAPORT PROFESIONAL COMPLET V7.3")
+    if is_saved_match:
+        st.warning("📋 **RAPORT SALVAT** - Unele analize detaliate pot fi limitate")
     st.markdown("---")
     
     if result['decision'] == 'SKIP':
@@ -179,303 +181,331 @@ def display_professional_report(result):
     st.markdown("---")
     st.header("📈 SECȚIUNEA 2: ANALIZĂ CONSENSUS")
     
-    consensus = result['details']['consensus_score']
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("TOTAL PUNCTE")
-        over_score = consensus['TOTAL']['OVER']
-        under_score = consensus['TOTAL']['UNDER']
+    consensus = result['details'].get('consensus_score', {})
+    if consensus:
+        col1, col2 = st.columns(2)
         
-        st.progress(over_score/100, text=f"OVER: {over_score:.1f}%")
-        st.progress(under_score/100, text=f"UNDER: {under_score:.1f}%")
+        with col1:
+            st.subheader("TOTAL PUNCTE")
+            over_score = consensus.get('TOTAL', {}).get('OVER', 0)
+            under_score = consensus.get('TOTAL', {}).get('UNDER', 0)
+            
+            st.progress(over_score/100, text=f"OVER: {over_score:.1f}%")
+            st.progress(under_score/100, text=f"UNDER: {under_score:.1f}%")
+            
+            if over_score > under_score:
+                st.success(f"✅ CONSENSUS DOMINANT: OVER (+{over_score - under_score:.1f}%)")
+            else:
+                st.success(f"✅ CONSENSUS DOMINANT: UNDER (+{under_score - over_score:.1f}%)")
         
-        if over_score > under_score:
-            st.success(f"✅ CONSENSUS DOMINANT: OVER (+{over_score - under_score:.1f}%)")
-        else:
-            st.success(f"✅ CONSENSUS DOMINANT: UNDER (+{under_score - over_score:.1f}%)")
-    
-    with col2:
-        st.subheader("HANDICAP")
-        home_score = consensus['HANDICAP']['HOME']
-        away_score = consensus['HANDICAP']['AWAY']
-        
-        st.progress(home_score/100, text=f"HOME: {home_score:.1f}%")
-        st.progress(away_score/100, text=f"AWAY: {away_score:.1f}%")
-        
-        if home_score > away_score:
-            st.success(f"✅ CONSENSUS DOMINANT: HOME (+{home_score - away_score:.1f}%)")
-        else:
-            st.success(f"✅ CONSENSUS DOMINANT: AWAY (+{away_score - home_score:.1f}%)")
+        with col2:
+            st.subheader("HANDICAP")
+            home_score = consensus.get('HANDICAP', {}).get('HOME', 0)
+            away_score = consensus.get('HANDICAP', {}).get('AWAY', 0)
+            
+            st.progress(home_score/100, text=f"HOME: {home_score:.1f}%")
+            st.progress(away_score/100, text=f"AWAY: {away_score:.1f}%")
+            
+            if home_score > away_score:
+                st.success(f"✅ CONSENSUS DOMINANT: HOME (+{home_score - away_score:.1f}%)")
+            else:
+                st.success(f"✅ CONSENSUS DOMINANT: AWAY (+{away_score - home_score:.1f}%)")
+    else:
+        st.warning("⚠️ Date consensus indisponibile pentru acest meci salvat")
     
     # SECȚIUNEA 3: DETECȚIE STEAM & MONEY FLOW
     st.markdown("---")
     st.header("🔥 SECȚIUNEA 3: ANALIZĂ STEAM MONEY")
     
-    steam = result['details']['steam_detection']
-    col1, col2 = st.columns(2)
+    steam = result['details'].get('steam_detection', {})
     
-    with col1:
-        st.subheader("TOTAL STEAM")
-        if steam['TOTAL']:
-            steam_data = steam['TOTAL']
-            st.success(f"✅ STEAM DETECTAT: {steam_data['direction']}")
-            st.metric("Linii afectate", steam_data['strength'])
-            st.metric("Move mediu", f"{steam_data['avg_move']:.3f}")
-            st.info(f"**Linii cu steam:** {[m['line'] for m in steam_data['lines_affected']]}")
-        else:
-            st.warning("⚠️ NU s-a detectat Steam pe TOTAL")
-    
-    with col2:
-        st.subheader("HANDICAP STEAM")
-        if steam['HANDICAP']:
-            steam_data = steam['HANDICAP']
-            st.success(f"✅ STEAM DETECTAT: {steam_data['direction']}")
-            st.metric("Linii afectate", steam_data['strength'])
-            st.metric("Move mediu", f"{steam_data['avg_move']:.3f}")
-            st.info(f"**Linii cu steam:** {[m['line'] for m in steam_data['lines_affected']]}")
-        else:
-            st.warning("⚠️ NU s-a detectat Steam pe HANDICAP")
+    if steam and not is_saved_match:  # Doar pentru analize noi
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("TOTAL STEAM")
+            if steam.get('TOTAL'):
+                steam_data = steam['TOTAL']
+                st.success(f"✅ STEAM DETECTAT: {steam_data['direction']}")
+                st.metric("Linii afectate", steam_data['strength'])
+                st.metric("Move mediu", f"{steam_data['avg_move']:.3f}")
+                st.info(f"**Linii cu steam:** {[m['line'] for m in steam_data['lines_affected']]}")
+            else:
+                st.warning("⚠️ NU s-a detectat Steam pe TOTAL")
+        
+        with col2:
+            st.subheader("HANDICAP STEAM")
+            if steam.get('HANDICAP'):
+                steam_data = steam['HANDICAP']
+                st.success(f"✅ STEAM DETECTAT: {steam_data['direction']}")
+                st.metric("Linii afectate", steam_data['strength'])
+                st.metric("Move mediu", f"{steam_data['avg_move']:.3f}")
+                st.info(f"**Linii cu steam:** {[m['line'] for m in steam_data['lines_affected']]}")
+            else:
+                st.warning("⚠️ NU s-a detectat Steam pe HANDICAP")
+    else:
+        st.info("ℹ️ Analiza Steam nu este disponibilă pentru meciuri salvate")
     
     # SECȚIUNEA 4: ANALIZĂ GRADIENT ȘI MANIPULARE
     st.markdown("---")
     st.header("📊 SECȚIUNEA 4: ANALIZĂ GRADIENT ȘI MANIPULARE")
     
-    gradient = result['details']['gradient_analysis']
-    manipulation_flags = result['details']['manipulation_flags']
+    gradient = result['details'].get('gradient_analysis', {})
+    manipulation_flags = result['details'].get('manipulation_flags', [])
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("UNIFORMITATE GRADIENT")
-        total_uniformity = gradient['TOTAL']['uniformity']
-        handicap_uniformity = gradient['HANDICAP']['uniformity']
+    if gradient and not is_saved_match:
+        col1, col2 = st.columns(2)
         
-        st.metric("TOTAL", f"{total_uniformity:.1f}%", 
-                 delta="BUN" if total_uniformity > 70 else "RIȘCANT" if total_uniformity < 50 else "NORMAL")
-        st.metric("HANDICAP", f"{handicap_uniformity:.1f}%", 
-                 delta="BUN" if handicap_uniformity > 70 else "RIȘCANT" if handicap_uniformity < 50 else "NORMAL")
+        with col1:
+            st.subheader("UNIFORMITATE GRADIENT")
+            total_uniformity = gradient.get('TOTAL', {}).get('uniformity', 0)
+            handicap_uniformity = gradient.get('HANDICAP', {}).get('uniformity', 0)
+            
+            st.metric("TOTAL", f"{total_uniformity:.1f}%", 
+                     delta="BUN" if total_uniformity > 70 else "RIȘCANT" if total_uniformity < 50 else "NORMAL")
+            st.metric("HANDICAP", f"{handicap_uniformity:.1f}%", 
+                     delta="BUN" if handicap_uniformity > 70 else "RIȘCANT" if handicap_uniformity < 50 else "NORMAL")
+            
+            if gradient.get('TOTAL', {}).get('anomalies'):
+                st.warning(f"⚠️ Anomalii TOTAL: {len(gradient['TOTAL']['anomalies'])}")
+            if gradient.get('HANDICAP', {}).get('anomalies'):
+                st.warning(f"⚠️ Anomalii HANDICAP: {len(gradient['HANDICAP']['anomalies'])}")
         
-        if gradient['TOTAL']['anomalies']:
-            st.warning(f"⚠️ Anomalii TOTAL: {len(gradient['TOTAL']['anomalies'])}")
-        if gradient['HANDICAP']['anomalies']:
-            st.warning(f"⚠️ Anomalii HANDICAP: {len(gradient['HANDICAP']['anomalies'])}")
-    
-    with col2:
-        st.subheader("DETECȚIE MANIPULARE")
-        if manipulation_flags:
-            st.error(f"🚨 {len(manipulation_flags)} TRAP-URI DETECTATE")
-            for flag in manipulation_flags[:3]:  # Arată primele 3
-                st.write(f"• {flag['type']} - Linie {flag['line']} - Severitate: {flag['severity']}")
-            if len(manipulation_flags) > 3:
-                st.info(f"... și încă {len(manipulation_flags) - 3} trap-uri")
-        else:
-            st.success("✅ NICIO MANIPULARE DETECTATĂ")
+        with col2:
+            st.subheader("DETECȚIE MANIPULARE")
+            if manipulation_flags:
+                st.error(f"🚨 {len(manipulation_flags)} TRAP-URI DETECTATE")
+                for flag in manipulation_flags[:3]:  # Arată primele 3
+                    st.write(f"• {flag['type']} - Linie {flag['line']} - Severitate: {flag['severity']}")
+                if len(manipulation_flags) > 3:
+                    st.info(f"... și încă {len(manipulation_flags) - 3} trap-uri")
+            else:
+                st.success("✅ NICIO MANIPULARE DETECTATĂ")
+    else:
+        st.info("ℹ️ Analiza Gradient și Manipulare nu este disponibilă pentru meciuri salvate")
     
     # SECȚIUNEA 5: ANALIZĂ KLD BIDIMENSIONALĂ
     st.markdown("---")
     st.header("🌡️ SECȚIUNEA 5: ANALIZĂ KLD (VOLATILITATE)")
     
-    kld_scores = result['details']['kld_scores']
+    kld_scores = result['details'].get('kld_scores', {})
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("TOTAL KLD")
-        if 'TOTAL' in kld_scores:
-            kld_data = kld_scores['TOTAL']
-            over_kld = abs(kld_data.get('OVER', 0))
-            under_kld = abs(kld_data.get('UNDER', 0))
-            
-            st.metric("OVER KLD", f"{over_kld:.4f}", 
-                     delta="SIGUR" if over_kld <= 0.03 else "RIȘCANT" if over_kld >= 0.06 else "NORMAL")
-            st.metric("UNDER KLD", f"{under_kld:.4f}", 
-                     delta="SIGUR" if under_kld <= 0.03 else "RIȘCANT" if under_kld >= 0.06 else "NORMAL")
-            
-            st.info(f"**Direcție dominantă KLD:** {kld_data.get('dominant_direction', 'N/A')}")
-    
-    with col2:
-        st.subheader("HANDICAP KLD")
-        if 'HANDICAP' in kld_scores:
-            kld_data = kld_scores['HANDICAP']
-            home_kld = abs(kld_data.get('HOME', 0))
-            away_kld = abs(kld_data.get('AWAY', 0))
-            
-            st.metric("HOME KLD", f"{home_kld:.4f}", 
-                     delta="SIGUR" if home_kld <= 0.03 else "RIȘCANT" if home_kld >= 0.06 else "NORMAL")
-            st.metric("AWAY KLD", f"{away_kld:.4f}", 
-                     delta="SIGUR" if away_kld <= 0.03 else "RIȘCANT" if away_kld >= 0.06 else "NORMAL")
-            
-            st.info(f"**Direcție dominantă KLD:** {kld_data.get('dominant_direction', 'N/A')}")
+    if kld_scores:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("TOTAL KLD")
+            if 'TOTAL' in kld_scores:
+                kld_data = kld_scores['TOTAL']
+                over_kld = abs(kld_data.get('OVER', 0))
+                under_kld = abs(kld_data.get('UNDER', 0))
+                
+                st.metric("OVER KLD", f"{over_kld:.4f}", 
+                         delta="SIGUR" if over_kld <= 0.03 else "RIȘCANT" if over_kld >= 0.06 else "NORMAL")
+                st.metric("UNDER KLD", f"{under_kld:.4f}", 
+                         delta="SIGUR" if under_kld <= 0.03 else "RIȘCANT" if under_kld >= 0.06 else "NORMAL")
+                
+                st.info(f"**Direcție dominantă KLD:** {kld_data.get('dominant_direction', 'N/A')}")
+        
+        with col2:
+            st.subheader("HANDICAP KLD")
+            if 'HANDICAP' in kld_scores:
+                kld_data = kld_scores['HANDICAP']
+                home_kld = abs(kld_data.get('HOME', 0))
+                away_kld = abs(kld_data.get('AWAY', 0))
+                
+                st.metric("HOME KLD", f"{home_kld:.4f}", 
+                         delta="SIGUR" if home_kld <= 0.03 else "RIȘCANT" if home_kld >= 0.06 else "NORMAL")
+                st.metric("AWAY KLD", f"{away_kld:.4f}", 
+                         delta="SIGUR" if away_kld <= 0.03 else "RIȘCANT" if away_kld >= 0.06 else "NORMAL")
+                
+                st.info(f"**Direcție dominantă KLD:** {kld_data.get('dominant_direction', 'N/A')}")
+    else:
+        st.warning("⚠️ Date KLD indisponibile pentru acest meci")
     
     # SECȚIUNEA 6: ANALIZĂ ISTORICĂ ȘI CONFLICT
     st.markdown("---")
     st.header("📜 SECȚIUNEA 6: ANALIZĂ MIȘCARE ISTORICĂ")
     
-    historic = result['details']['historic_analysis']
+    historic = result['details'].get('historic_analysis', {})
     
-    for market in ['TOTAL', 'HANDICAP']:
-        if market in historic:
-            data = historic[market]
-            if data['open_line'] is not None:
-                st.subheader(f"{market} ISTORIC")
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Open Line", f"{data['open_line']:.1f}")
-                with col2:
-                    st.metric("Close Line", f"{data['close_line']:.1f}")
-                with col3:
-                    movement = data['movement']
-                    st.metric("Mișcare", f"{movement:+.1f}", 
-                             delta="URCĂ" if movement > 0 else "COBOARĂ" if movement < 0 else "STABIL")
-                
-                if data['is_significant']:
-                    if data['dominant_direction']:
-                        if data['dominant_direction'] == result['direction_final']:
-                            st.success(f"✅ ALINIERE: Mișcarea istorică confirmă direcția {result['direction_final']}")
-                        else:
-                            st.error(f"🚨 CONFLICT: Mișcarea istorică ({data['dominant_direction']}) contrazice direcția {result['direction_final']}")
+    if historic:
+        for market in ['TOTAL', 'HANDICAP']:
+            if market in historic:
+                data = historic[market]
+                if data.get('open_line') is not None:
+                    st.subheader(f"{market} ISTORIC")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Open Line", f"{data['open_line']:.1f}")
+                    with col2:
+                        st.metric("Close Line", f"{data['close_line']:.1f}")
+                    with col3:
+                        movement = data.get('movement', 0)
+                        st.metric("Mișcare", f"{movement:+.1f}", 
+                                 delta="URCĂ" if movement > 0 else "COBOARĂ" if movement < 0 else "STABIL")
+                    
+                    if data.get('is_significant'):
+                        if data.get('dominant_direction'):
+                            if data['dominant_direction'] == result['direction_final']:
+                                st.success(f"✅ ALINIERE: Mișcarea istorică confirmă direcția {result['direction_final']}")
+                            else:
+                                st.error(f"🚨 CONFLICT: Mișcarea istorică ({data['dominant_direction']}) contrazice direcția {result['direction_final']}")
+    else:
+        st.info("ℹ️ Analiza Istorică nu este disponibilă pentru acest meci")
     
     # SECȚIUNEA 7: ANALIZĂ ENȚROPIE ȘI CONCENTRARE
     st.markdown("---")
     st.header("🧠 SECȚIUNEA 7: ANALIZĂ ENȚROPIE")
     
-    entropy_alerts = result['details']['entropy_alerts']
+    entropy_alerts = result['details'].get('entropy_alerts', {})
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("TOTAL ENȚROPIE")
-        if entropy_alerts['TOTAL']:
-            alert = entropy_alerts['TOTAL']
-            st.error(f"🚨 ALERTĂ ENȚROPIE: {alert['direction']}")
-            st.metric("Scor Entropie", f"{alert['entropy']:.3f}")
-            st.warning("⚠️ RISC: Concentrare extremă de probabilități detectată")
-        else:
-            st.success("✅ ENȚROPIE NORMALĂ")
-            st.info("Distribuție sănătoasă a probabilităților")
-    
-    with col2:
-        st.subheader("HANDICAP ENȚROPIE")
-        if entropy_alerts['HANDICAP']:
-            alert = entropy_alerts['HANDICAP']
-            st.error(f"🚨 ALERTĂ ENȚROPIE: {alert['direction']}")
-            st.metric("Scor Entropie", f"{alert['entropy']:.3f}")
-            st.warning("⚠️ RISC: Concentrare extremă de probabilități detectată")
-        else:
-            st.success("✅ ENȚROPIE NORMALĂ")
-            st.info("Distribuție sănătoasă a probabilităților")
+    if entropy_alerts and not is_saved_match:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("TOTAL ENȚROPIE")
+            if entropy_alerts.get('TOTAL'):
+                alert = entropy_alerts['TOTAL']
+                st.error(f"🚨 ALERTĂ ENȚROPIE: {alert['direction']}")
+                st.metric("Scor Entropie", f"{alert['entropy']:.3f}")
+                st.warning("⚠️ RISC: Concentrare extremă de probabilități detectată")
+            else:
+                st.success("✅ ENȚROPIE NORMALĂ")
+                st.info("Distribuție sănătoasă a probabilităților")
+        
+        with col2:
+            st.subheader("HANDICAP ENȚROPIE")
+            if entropy_alerts.get('HANDICAP'):
+                alert = entropy_alerts['HANDICAP']
+                st.error(f"🚨 ALERTĂ ENȚROPIE: {alert['direction']}")
+                st.metric("Scor Entropie", f"{alert['entropy']:.3f}")
+                st.warning("⚠️ RISC: Concentrare extremă de probabilități detectată")
+            else:
+                st.success("✅ ENȚROPIE NORMALĂ")
+                st.info("Distribuție sănătoasă a probabilităților")
+    else:
+        st.info("ℹ️ Analiza Entropie nu este disponibilă pentru meciuri salvate")
     
     # SECȚIUNEA 8: MATRICEA DE ÎNCREDERE DETALIATĂ
     st.markdown("---")
     st.header("🎯 SECȚIUNEA 8: MATRICEA ÎNCREDERE V3 DETALIATĂ")
     
-    confidence_matrix = result['details']['confidence_matrix']
-    score_data = result['details']['score_data']
+    confidence_matrix = result['details'].get('confidence_matrix', {})
+    score_data = result['details'].get('score_data', {})
     
-    for market_dir, score in confidence_matrix.items():
-        if score >= 50:  # Arată doar direcțiile cu încredere >= 50%
-            with st.expander(f"🔍 ANALIZĂ DETALIATĂ: {market_dir} (Scor: {score:.1f})", expanded=True):
-                if market_dir in score_data:
-                    components = score_data[market_dir]['Components']
-                    
-                    # Scoruri componente
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Consensus", f"{components['Consensus']['points']:.1f}")
-                    with col2:
-                        st.metric("Gradient", f"{components['Gradient']['points']:.1f}")
-                    with col3:
-                        st.metric("Steam", f"{components['Steam']['points']:.1f}")
-                    with col4:
-                        st.metric("Contrarion", f"{components['Contrarion_Bonus']['points']:.1f}")
-                    
-                    # Penalizări
-                    if any([components['Trap_Analysis']['points'] > 0,
-                           components['Entropy_Alert']['points'] > 0,
-                           components['Historic_Penalty']['points'] > 0,
-                           components['Historic_Conflict']['points'] > 0]):
+    if confidence_matrix:
+        for market_dir, score in confidence_matrix.items():
+            if score >= 50:  # Arată doar direcțiile cu încredere >= 50%
+                with st.expander(f"🔍 ANALIZĂ DETALIATĂ: {market_dir} (Scor: {score:.1f})", expanded=True):
+                    if market_dir in score_data:
+                        components = score_data[market_dir]['Components']
                         
-                        st.subheader("⚠️ Penalizări Aplicate")
-                        penalty_cols = st.columns(4)
+                        # Scoruri componente
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Consensus", f"{components['Consensus']['points']:.1f}")
+                        with col2:
+                            st.metric("Gradient", f"{components['Gradient']['points']:.1f}")
+                        with col3:
+                            st.metric("Steam", f"{components['Steam']['points']:.1f}")
+                        with col4:
+                            st.metric("Contrarion", f"{components['Contrarion_Bonus']['points']:.1f}")
                         
-                        with penalty_cols[0]:
-                            if components['Trap_Analysis']['points'] > 0:
-                                st.error(f"Trap: -{components['Trap_Analysis']['points']:.1f}")
+                        # Penalizări
+                        if any([components['Trap_Analysis']['points'] > 0,
+                               components['Entropy_Alert']['points'] > 0,
+                               components['Historic_Penalty']['points'] > 0,
+                               components['Historic_Conflict']['points'] > 0]):
+                            
+                            st.subheader("⚠️ Penalizări Aplicate")
+                            penalty_cols = st.columns(4)
+                            
+                            with penalty_cols[0]:
+                                if components['Trap_Analysis']['points'] > 0:
+                                    st.error(f"Trap: -{components['Trap_Analysis']['points']:.1f}")
+                            
+                            with penalty_cols[1]:
+                                if components['Entropy_Alert']['points'] > 0:
+                                    st.error(f"Entropie: -{components['Entropy_Alert']['points']:.1f}")
+                            
+                            with penalty_cols[2]:
+                                if components['Historic_Penalty']['points'] > 0:
+                                    st.error(f"Istoric: -{components['Historic_Penalty']['points']:.1f}")
+                            
+                            with penalty_cols[3]:
+                                if components['Historic_Conflict']['points'] > 0:
+                                    st.error(f"Conflict: -{components['Historic_Conflict']['points']:.1f}")
                         
-                        with penalty_cols[1]:
-                            if components['Entropy_Alert']['points'] > 0:
-                                st.error(f"Entropie: -{components['Entropy_Alert']['points']:.1f}")
-                        
-                        with penalty_cols[2]:
-                            if components['Historic_Penalty']['points'] > 0:
-                                st.error(f"Istoric: -{components['Historic_Penalty']['points']:.1f}")
-                        
-                        with penalty_cols[3]:
-                            if components['Historic_Conflict']['points'] > 0:
-                                st.error(f"Conflict: -{components['Historic_Conflict']['points']:.1f}")
-                    
-                    # Analiză Trap
-                    if components['Trap_Analysis']['classification']:
-                        trap_class = components['Trap_Analysis']['classification']
-                        st.subheader("🔎 Analiză Trap Lines")
-                        
-                        if trap_class['type'] == 'CONTRARION':
-                            st.success(f"🎯 TRAP CONTRARION DETECTAT (Confidence: {trap_class['confidence']}%)")
-                            st.info(f"**Acțiune:** {trap_class['action']}")
-                            st.info(f"**Raționament:** {trap_class['reasoning']}")
-                        elif trap_class['type'] == 'REAL':
-                            st.error(f"🚫 TRAP REAL DETECTAT (Confidence: {trap_class['confidence']}%)")
-                            st.info(f"**Acțiune:** {trap_class['action']}")
-                            st.info(f"**Raționament:** {trap_class['reasoning']}")
-                        else:
-                            st.warning(f"⚠️ TRAP AMBIGUU (Confidence: {trap_class['confidence']}%)")
-                            st.info(f"**Acțiune:** {trap_class['action']}")
+                        # Analiză Trap
+                        if components['Trap_Analysis']['classification']:
+                            trap_class = components['Trap_Analysis']['classification']
+                            st.subheader("🔎 Analiză Trap Lines")
+                            
+                            if trap_class['type'] == 'CONTRARION':
+                                st.success(f"🎯 TRAP CONTRARION DETECTAT (Confidence: {trap_class['confidence']}%)")
+                                st.info(f"**Acțiune:** {trap_class['action']}")
+                                st.info(f"**Raționament:** {trap_class['reasoning']}")
+                            elif trap_class['type'] == 'REAL':
+                                st.error(f"🚫 TRAP REAL DETECTAT (Confidence: {trap_class['confidence']}%)")
+                                st.info(f"**Acțiune:** {trap_class['action']}")
+                                st.info(f"**Raționament:** {trap_class['reasoning']}")
+                            else:
+                                st.warning(f"⚠️ TRAP AMBIGUU (Confidence: {trap_class['confidence']}%)")
+                                st.info(f"**Acțiune:** {trap_class['action']}")
+    else:
+        st.warning("⚠️ Matricea de încredere nu este disponibilă pentru acest meci")
     
     # SECȚIUNEA 9: REZUMAT STRATEGIC
     st.markdown("---")
     st.header("💡 SECȚIUNEA 9: REZUMAT STRATEGIC")
     
-    # Analiză confluence
-    confluence_score = 0
-    confluence_factors = []
-    
-    # Verifică factori de confluence
-    if result['details']['steam_detection'][result['market']] and \
-       result['details']['steam_detection'][result['market']]['direction'] == result['direction_final']:
-        confluence_score += 1
-        confluence_factors.append("✅ Steam confirmă direcția")
-    
-    if result['confidence'] >= 70:
-        confluence_score += 1
-        confluence_factors.append("✅ Încredere V3 ridicată (≥70%)")
-    
-    gradient_uniformity = result['details']['gradient_analysis'][result['market']]['uniformity']
-    if gradient_uniformity >= 70:
-        confluence_score += 1
-        confluence_factors.append("✅ Gradient uniform")
-    
-    kld_direction = abs(result['details']['kld_scores'][result['market']].get(result['direction_initial'], 0))
-    if kld_direction <= 0.03:
-        confluence_score += 1
-        confluence_factors.append("✅ KLD sigur")
-    
-    # Afișează scorul confluence
-    st.subheader("📊 Scor Confluence Strategic")
-    st.progress(confluence_score/4, text=f"Confluence Score: {confluence_score}/4")
-    
-    for factor in confluence_factors:
-        st.write(factor)
-    
-    # Recomandare finală
-    st.markdown("---")
-    if confluence_score >= 3:
-        st.success("🎯 **RECOMANDARE: PLAY PUTERNIC** - Multiple confirmări strategice")
-    elif confluence_score >= 2:
-        st.info("📈 **RECOMANDARE: PLAY STANDARD** - Confirmări moderate")
+    if not is_saved_match:
+        # Analiză confluence doar pentru analize noi
+        confluence_score = 0
+        confluence_factors = []
+        
+        # Verifică factori de confluence
+        steam_detection = result['details'].get('steam_detection', {})
+        if steam_detection.get(result['market']) and \
+           steam_detection[result['market']]['direction'] == result['direction_final']:
+            confluence_score += 1
+            confluence_factors.append("✅ Steam confirmă direcția")
+        
+        if result['confidence'] >= 70:
+            confluence_score += 1
+            confluence_factors.append("✅ Încredere V3 ridicată (≥70%)")
+        
+        gradient_analysis = result['details'].get('gradient_analysis', {})
+        gradient_uniformity = gradient_analysis.get(result['market'], {}).get('uniformity', 0)
+        if gradient_uniformity >= 70:
+            confluence_score += 1
+            confluence_factors.append("✅ Gradient uniform")
+        
+        kld_scores = result['details'].get('kld_scores', {})
+        kld_direction = abs(kld_scores.get(result['market'], {}).get(result['direction_initial'], 0))
+        if kld_direction <= 0.03:
+            confluence_score += 1
+            confluence_factors.append("✅ KLD sigur")
+        
+        # Afișează scorul confluence
+        st.subheader("📊 Scor Confluence Strategic")
+        st.progress(confluence_score/4, text=f"Confluence Score: {confluence_score}/4")
+        
+        for factor in confluence_factors:
+            st.write(factor)
+        
+        # Recomandare finală
+        st.markdown("---")
+        if confluence_score >= 3:
+            st.success("🎯 **RECOMANDARE: PLAY PUTERNIC** - Multiple confirmări strategice")
+        elif confluence_score >= 2:
+            st.info("📈 **RECOMANDARE: PLAY STANDARD** - Confirmări moderate")
+        else:
+            st.warning("⚠️ **RECOMANDARE: PLAY CU PRUDENȚĂ** - Confirmări limitate")
     else:
-        st.warning("⚠️ **RECOMANDARE: PLAY CU PRUDENȚĂ** - Confirmări limitate")
+        st.info("ℹ️ Analiza Confluence Strategic nu este disponibilă pentru meciuri salvate")
 
 # Interfața principală
 def main():
@@ -537,8 +567,8 @@ def render_new_analysis(db):
                 
                 result = analyzer.generate_prediction()
                 
-                # ✅ CORECTARE: APELEAZĂ FUNCȚIA PENTRU AFIȘARE RAPORT
-                display_professional_report(result)
+                # ✅ APELEAZĂ FUNCȚIA PENTRU AFIȘARE RAPORT (is_saved_match=False)
+                display_professional_report(result, is_saved_match=False)
                 
                 # Opțiune salvare
                 if result['decision'] != 'SKIP' and db:
@@ -610,8 +640,8 @@ def render_saved_matches(db):
                 }
             }
             
-            # Afișează raportul
-            display_professional_report(result)
+            # ✅ CORECTARE: APELEAZĂ CU is_saved_match=True
+            display_professional_report(result, is_saved_match=True)
         
         # Afișare decizie originală
         st.subheader("Decizie Originală")
