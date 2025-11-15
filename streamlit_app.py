@@ -537,7 +537,7 @@ def render_new_analysis(db):
                 
                 result = analyzer.generate_prediction()
                 
-                # Afișare raport profesional COMPLET
+                # ✅ CORECTARE: APELEAZĂ FUNCȚIA PENTRU AFIȘARE RAPORT
                 display_professional_report(result)
                 
                 # Opțiune salvare
@@ -582,17 +582,36 @@ def render_saved_matches(db):
         with col3:
             st.metric("Oaspete", match_data.get('AwayTeam', 'N/A'))
         
-        # Buton reanaliză
-        if st.button("🔄 Regenerare Raport Profesional", type="primary"):
-            # Extrage datele pentru repopulare
-            st.session_state.reanalyze_data = {
-                'league': match_data.get('League', ''),
-                'home_team': match_data.get('HomeTeam', ''),
-                'away_team': match_data.get('AwayTeam', ''),
-                'total_lines': match_data.get('All_Total_Lines', {}),
-                'handicap_lines': match_data.get('All_Handicap_Lines', {})
+        # Buton pentru a afișa raportul complet din datele salvate
+        if st.button("📊 Afișează Raportul Profesional Salvat", type="primary"):
+            # Reconstruim result-ul din datele salvate
+            result = {
+                'decision': 'PLAY' if match_data.get('Decision_Type') != 'SKIP' else 'SKIP',
+                'market': match_data.get('Decision_Market', ''),
+                'direction_initial': match_data.get('Decision_Direction_Initial_V3', ''),
+                'direction_final': match_data.get('Decision_Direction_Final', ''),
+                'line_original': match_data.get('Decision_Line_ORIGINAL', 0),
+                'line_buffered': match_data.get('Decision_Line_BUFFERED', 0),
+                'cota': match_data.get('Decision_Cota_REFERENCE', 0),
+                'source': match_data.get('Decision_LineSource', ''),
+                'reason': match_data.get('Decision_Reason', ''),
+                'confidence': match_data.get('Decision_Confidence_V3', 0),
+                'v7_action': match_data.get('Decision_Type', ''),
+                'details': {
+                    'consensus_score': match_data.get('Consensus_Score', {}),
+                    'steam_detection': {},  # Nu este salvat în datele originale
+                    'gradient_analysis': {}, # Nu este salvat în datele originale  
+                    'manipulation_flags': [], # Nu este salvat în datele originale
+                    'entropy_alerts': {}, # Nu este salvat în datele originale
+                    'historic_analysis': match_data.get('Historic_Analysis', {}),
+                    'kld_scores': match_data.get('KLD_Scores_Bidimensional', {}),
+                    'confidence_matrix': match_data.get('Confidence_Matrix_V3', {}),
+                    'score_data': {} # Nu este salvat în datele originale
+                }
             }
-            st.rerun()
+            
+            # Afișează raportul
+            display_professional_report(result)
         
         # Afișare decizie originală
         st.subheader("Decizie Originală")
