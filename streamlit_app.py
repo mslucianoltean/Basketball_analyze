@@ -16,10 +16,9 @@ st.set_page_config(layout="wide", page_title="Hybrid Analyzer V7.3")
 
 if 'analysis_output' not in st.session_state: st.session_state['analysis_output'] = ""
 if 'result_data' not in st.session_state: st.session_state['result_data'] = {}
-# INITIALIZARE CU DICTIONAR GOL - FARA VALORI DEFAULT
 if 'form_data' not in st.session_state: st.session_state['form_data'] = {}
-# MARCAJUL CRITIC: Cand e True, datele noi au fost incarcate din Firebase
-if 'data_loaded' not in st.session_state: st.session_state['data_loaded'] = False 
+# SUFIX CRITIC: Se schimba la fiecare incarcare pentru a forta repopularea widget-urilor
+if 'key_suffix' not in st.session_state: st.session_state['key_suffix'] = 0 
     
 # --- 2. Functie Ajutatoare pentru Populare Formular (Returneaza string gol) ---
 def get_value(key):
@@ -38,7 +37,6 @@ def convert_and_run(data_input_str):
             data_input_float[k] = v
         else:
             try:
-                # Folosim '0.0' daca stringul e gol, pentru a nu da eroare la conversie
                 val_to_convert = v.strip() if v else "0.0" 
                 data_input_float[k] = float(val_to_convert) 
             except ValueError:
@@ -63,8 +61,7 @@ with st.sidebar:
             key='selectbox_id'
         )
         
-        # ATENTIE: Daca repopularea esueaza din nou, vom folosi RERUN cu o cheie unica
-        if st.button("Incarca Analiza pentru Repopulare (Nou)"):
+        if st.button("Incarca Analiza & Repopuleaza Formularul"):
             if selected_id:
                 safe_selected_id = selected_id.strip()
             else:
@@ -74,7 +71,7 @@ with st.sidebar:
                 data = load_analysis_data(safe_selected_id)
                 
                 if data:
-                    st.success(f"Analiza `{safe_selected_id}` incarcata. **Repornire forțată...**")
+                    st.success(f"Analiza `{safe_selected_id}` incarcata. Repopularea ar trebui sa fie vizibila.")
                     
                     # Definim TOATE CHEILE PE CARE LE ASTEPTAM
                     all_keys = [
@@ -87,7 +84,6 @@ with st.sidebar:
                         ])
 
                     new_form_data = {} 
-
                     if 'date_input' in data:
                         for k in all_keys:
                             v = data['date_input'].get(k)
@@ -99,11 +95,12 @@ with st.sidebar:
                     st.session_state['result_data'] = data
                     st.session_state['analysis_output'] = data.get('analysis_markdown', "⚠️ Raport Detaliat Lipsă. Rulați analiza pentru a genera raportul nou.")
 
-                    # 2. SETARE MARCAJ DE INCARCARE
-                    st.session_state['data_loaded'] = True 
+                    # 2. INCREMENTARE SUFIX CHEIE CRITICĂ (FORTEAZA REDESENAREA)
+                    st.session_state['key_suffix'] += 1 
                     
-                    # 3. REPORNIRE SCRIPT PENTRU A FORTA REDESENAREA WIDGET-URILOR CU VALOAREA NOUA
-                    st.rerun() 
+                    # 3. AFISARE JSON PENTRU DEBUGGING
+                    st.subheader("Date Analiza Brute (Firebase - Debugging)")
+                    st.json(data) 
                     
                 else:
                     st.error(f"❌ EROARE CRITICA: S-a selectat ID-ul `{safe_selected_id}`, dar documentul nu a putut fi găsit/încărcat (funcția load_analysis_data a returnat None).")
@@ -118,28 +115,24 @@ with st.sidebar:
 st.title("🏀 Hybrid Analyzer V7.3 - Analiza Baschet")
 st.markdown("Introduceti cotele de deschidere (Open) si inchidere (Close) pentru 7 linii adiacente.")
 
+current_suffix = st.session_state['key_suffix'] # Preluam suficsul curent
+
 st.subheader("Detalii Meci")
 col_liga, col_gazda, col_oaspete = st.columns(3)
 
-liga = col_liga.text_input("Liga", value=get_value('liga'), key='liga')
-echipa_gazda = col_gazda.text_input("Echipa Gazda", value=get_value('echipa_gazda'), key='echipa_gazda')
-echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", value=get_value('echipa_oaspete'), key='echipa_oaspete')
+# Aplicam suficsul la chei
+liga = col_liga.text_input("Liga", value=get_value('liga'), key=f"liga_{current_suffix}")
+echipa_gazda = col_gazda.text_input("Echipa Gazda", value=get_value('echipa_gazda'), key=f"echipa_gazda_{current_suffix}")
+echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", value=get_value('echipa_oaspete'), key=f"echipa_oaspete_{current_suffix}")
 
 data_input_str = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': echipa_oaspete}
 
 st.markdown("---")
 
-# AFISARE JSON (Debugging) - AFISAM DOAR DACA DATELE AU FOST INCARCATE
-if st.session_state.get('data_loaded'):
-    st.subheader("Date Analiza Brute (Firebase - Debugging)")
-    st.json(st.session_state.get('result_data', {}))
-    st.session_state['data_loaded'] = False # Resetam dupa afisare
-st.markdown("---")
-
 
 st.subheader("Total Puncte (Total Points)")
 key_hist = 'tp_line_open_hist'
-tp_line_open_hist = st.columns([1, 5])[0].text_input("Open Istoric", value=get_value(key_hist), key=key_hist) 
+tp_line_open_hist = st.columns([1, 5])[0].text_input("Open Istoric", value=get_value(key_hist), key=f"{key_hist}_{current_suffix}") 
 data_input_str[key_hist] = tp_line_open_hist
 
 tp_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
@@ -157,11 +150,21 @@ for key, label in zip(tp_lines_keys, tp_lines_labels):
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     col1.markdown(f"**{label}**")
     
-    data_input_str[f'tp_line_{key}'] = col2.text_input(f'tp_line_{key}', value=get_value(f'tp_line_{key}'), key=f'tp_line_{key}', label_visibility="hidden") 
-    data_input_str[f'tp_open_over_{key}'] = col3.text_input(f'tp_open_over_{key}', value=get_value(f'tp_open_over_{key}'), key=f'tp_open_over_{key}', label_visibility="hidden")
-    data_input_str[f'tp_close_over_{key}'] = col4.text_input(f'tp_close_over_{key}', value=get_value(f'tp_close_over_{key}'), key=f'tp_close_over_{key}', label_visibility="hidden")
-    data_input_str[f'tp_open_under_{key}'] = col5.text_input(f'tp_open_under_{key}', value=get_value(f'tp_open_under_{key}'), key=f'tp_open_under_{key}', label_visibility="hidden")
-    data_input_str[f'tp_close_under_{key}'] = col6.text_input(f'tp_close_under_{key}', value=get_value(f'tp_close_under_{key}'), key=f'tp_close_under_{key}', label_visibility="hidden")
+    # Aplicam suficsul la chei TP
+    key_tp_line = f'tp_line_{key}'
+    data_input_str[key_tp_line] = col2.text_input(key_tp_line, value=get_value(key_tp_line), key=f"{key_tp_line}_{current_suffix}", label_visibility="hidden") 
+    
+    key_tp_open_over = f'tp_open_over_{key}'
+    data_input_str[key_tp_open_over] = col3.text_input(key_tp_open_over, value=get_value(key_tp_open_over), key=f"{key_tp_open_over}_{current_suffix}", label_visibility="hidden")
+    
+    key_tp_close_over = f'tp_close_over_{key}'
+    data_input_str[key_tp_close_over] = col4.text_input(key_tp_close_over, value=get_value(key_tp_close_over), key=f"{key_tp_close_over}_{current_suffix}", label_visibility="hidden")
+    
+    key_tp_open_under = f'tp_open_under_{key}'
+    data_input_str[key_tp_open_under] = col5.text_input(key_tp_open_under, value=get_value(key_tp_open_under), key=f"{key_tp_open_under}_{current_suffix}", label_visibility="hidden")
+    
+    key_tp_close_under = f'tp_close_under_{key}'
+    data_input_str[key_tp_close_under] = col6.text_input(key_tp_close_under, value=get_value(key_tp_close_under), key=f"{key_tp_close_under}_{current_suffix}", label_visibility="hidden")
 
 st.markdown("---")
 st.subheader("Handicap")
@@ -180,11 +183,21 @@ for key, label in zip(hd_lines_keys, tp_lines_labels):
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     col1.markdown(f"**{label}**")
     
-    data_input_str[f'hd_line_{key}'] = col2.text_input(f'hd_line_{key}', value=get_value(f'hd_line_{key}'), key=f'hd_line_{key}', label_visibility="hidden")
-    data_input_str[f'hd_open_home_{key}'] = col3.text_input(f'hd_open_home_{key}', value=get_value(f'hd_open_home_{key}'), key=f'hd_open_home_{key}', label_visibility="hidden")
-    data_input_str[f'hd_close_home_{key}'] = col4.text_input(f'hd_close_home_{key}', value=get_value(f'hd_close_home_{key}'), key=f'hd_close_home_{key}', label_visibility="hidden")
-    data_input_str[f'hd_open_away_{key}'] = col5.text_input(f'hd_open_away_{key}', value=get_value(f'hd_open_away_{key}'), key=f'hd_open_away_{key}', label_visibility="hidden")
-    data_input_str[f'hd_close_away_{key}'] = col6.text_input(f'hd_close_away_{key}', value=get_value(f'hd_close_away_{key}'), key=f'hd_close_away_{key}', label_visibility="hidden")
+    # Aplicam suficsul la chei Handicap
+    key_hd_line = f'hd_line_{key}'
+    data_input_str[key_hd_line] = col2.text_input(key_hd_line, value=get_value(key_hd_line), key=f"{key_hd_line}_{current_suffix}", label_visibility="hidden")
+    
+    key_hd_open_home = f'hd_open_home_{key}'
+    data_input_str[key_hd_open_home] = col3.text_input(key_hd_open_home, value=get_value(key_hd_open_home), key=f"{key_hd_open_home}_{current_suffix}", label_visibility="hidden")
+    
+    key_hd_close_home = f'hd_close_home_{key}'
+    data_input_str[key_hd_close_home] = col4.text_input(key_hd_close_home, value=get_value(key_hd_close_home), key=f"{key_hd_close_home}_{current_suffix}", label_visibility="hidden")
+    
+    key_hd_open_away = f'hd_open_away_{key}'
+    data_input_str[key_hd_open_away] = col5.text_input(key_hd_open_away, value=get_value(key_hd_open_away), key=f"{key_hd_open_away}_{current_suffix}", label_visibility="hidden")
+    
+    key_hd_close_away = f'hd_close_away_{key}'
+    data_input_str[key_hd_close_away] = col6.text_input(key_hd_close_away, value=get_value(key_hd_close_away), key=f"{key_hd_close_away}_{current_suffix}", label_visibility="hidden")
 
 
 # Butonul de Rulare
