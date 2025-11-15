@@ -53,32 +53,38 @@ if 'form_data' not in st.session_state:
     st.session_state['form_data'] = DEFAULT_FORM_DATA.copy()
 
 
-# --- 3. Functie Ajutatoare pentru Populare Formular (ROBUSTIFICATĂ) ---
+# --- 3. Functie Ajutatoare pentru Populare Formular (VERSIUNE FINALĂ ROBUSTĂ) ---
 def get_value(key):
     """
-    Returnează valoarea din starea sesiunii, folosind valoarea implicită (float/str)
-    dacă valoarea curentă este None, lipsă sau goală.
+    Returnează valoarea din starea sesiunii, garantând tipul de date corect.
+    Acest bloc este crucial pentru a preveni 'AttributeError' la st.number_input.
     """
     
     default_val = DEFAULT_FORM_DATA.get(key)
     # Folosim .get() pentru a prelua valoarea, care poate fi None daca nu exista
     val = st.session_state['form_data'].get(key)
     
-    # 1. Daca valoarea e nula sau goala, intoarcem default
-    if val is None or val == '' or val == 'None':
+    # 1. Daca valoarea este None, goala, sau un string "None"
+    if val is None or val == '' or str(val).lower() == 'none':
         return default_val
     
-    # 2. Daca valoarea implicita este float/int, incercam conversia
+    # 2. Gestiunea Tipului Numeric (cea mai frecventă sursă de AttributeError)
     if isinstance(default_val, (float, int)):
         try:
-            # Foarte important: Streamlit vrea float sau int
+            # Foarte important: Fortam totul la float standard Python
+            # Acesta rezolva problema cu tipurile de date din Streamlit / Firebase
             return float(val) 
         except (ValueError, TypeError):
-            # Daca conversia esueaza (valoare non-numerica), revenim la default
+            # Dacă conversia eșuează (e.g., valoarea e un string non-numeric din greșeală),
+            # revenim la valoarea implicită (float)
             return default_val
             
-    # 3. Pentru string-uri si alte tipuri valide, returnam valoarea
-    return val 
+    # 3. Gestiunea String-urilor
+    if isinstance(default_val, str):
+        return str(val)
+        
+    # 4. Fallback (dacă nu e nici numeric, nici string)
+    return val if val is not None else default_val
 
 
 # --- Bara Laterala (Sidebar) ---
@@ -116,7 +122,7 @@ with st.sidebar:
                     st.subheader("Date Analiză Brute (Firebase)")
                     st.json(data)
                     
-                    # Rerun simplu: Eroarea a fost rezolvata prin robustificarea get_value
+                    # Aici se declanșează eroarea. Sperăm că get_value a rezolvat-o.
                     st.experimental_rerun() 
                 else:
                     st.error("Nu s-au putut încărca datele pentru ID-ul selectat.")
@@ -164,6 +170,7 @@ with st.form(key='hybrid_analysis_form'):
     col_open_hist, _ = st.columns([1, 5])
     
     key_hist = 'tp_line_open_hist'
+    # Folosind get_value(), Streamlit primeste garantat un float
     tp_line_open_hist = col_open_hist.number_input("Open Istoric", min_value=150.0, max_value=300.0, 
                                                   value=get_value(key_hist), step=0.5, format="%.1f", key=key_hist)
     data_input[key_hist] = tp_line_open_hist
@@ -178,6 +185,7 @@ with st.form(key='hybrid_analysis_form'):
         
         col1.markdown(f"**{label}**")
         
+        # Aici sunt multiple number_input, protejate de get_value
         data_input[f'tp_line_{key}'] = col2.number_input("", min_value=150.0, max_value=300.0, 
                                                           value=get_value(f'tp_line_{key}'), step=0.5, format="%.1f", key=f'tp_line_{key}')
         data_input[f'tp_open_over_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
