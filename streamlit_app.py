@@ -44,20 +44,29 @@ if 'form_data' not in st.session_state:
     st.session_state['form_data'] = DEFAULT_FORM_DATA.copy()
 
 
-# --- Functie Ajutatoare pentru Populare Formular ---
+# --- Functie Ajutatoare pentru Populare Formular (VERSIUNEA FINALĂ) ---
 def get_value(key):
-    """Returnează valoarea din starea sesiunii, folosind valoarea implicită dacă nu este găsită."""
-    val = st.session_state['form_data'].get(key, DEFAULT_FORM_DATA.get(key))
+    """Returnează valoarea din starea sesiunii, forțând conversia la tipul corect și tratând None."""
     
-    # Asigura conversia la tipul corect (Streamlit poate citi numere ca str din state)
-    if isinstance(DEFAULT_FORM_DATA.get(key), (float, int)):
+    # 1. Obține valoarea din starea sesiunii sau valoarea implicită
+    default_val = DEFAULT_FORM_DATA.get(key)
+    val = st.session_state['form_data'].get(key, default_val)
+
+    # 2. Gestiunea NULL/NONE sau a valorilor lipsă (cele care cauzează eroarea)
+    if val is None or val == 'None' or val == '':
+        return default_val
+        
+    # 3. Conversia tipurilor (crucială pentru number_input)
+    if isinstance(default_val, (float, int)):
         try:
-            return float(val) if val is not None else DEFAULT_FORM_DATA.get(key)
+            # Încercăm să convertim la float/int
+            return float(val)
         except (ValueError, TypeError):
-            return DEFAULT_FORM_DATA.get(key)
-    return val if val is not None else DEFAULT_FORM_DATA.get(key)
-
-
+            # Dacă conversia eșuează (e.g., valoarea e 'text'), revenim la valoarea implicită
+            return default_val
+            
+    # 4. Returnăm valoarea pentru string-uri (text_input)
+    return val
 # --- Bara Laterala (Sidebar) ---
 
 with st.sidebar:
