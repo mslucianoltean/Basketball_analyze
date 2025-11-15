@@ -84,6 +84,7 @@ def get_value(key):
         return str(val)
         
     # 4. Fallback (daca nu e nici numeric, nici string)
+    # Acest fallback e util daca data_input contine o cheie necunoscuta sau un tip complex
     return val if val is not None else default_val
 
 
@@ -122,8 +123,27 @@ with st.sidebar:
                     st.subheader("Date Analiza Brute (Firebase)")
                     st.json(data)
                     
-                    # Aici se declanseaza eroarea. Speram ca get_value a rezolvat-o.
-                    st.experimental_rerun() 
+                    # BLOC DE VERIFICARE TIPURI DE DATE CRITICAL (Acesta izoleaza problema)
+                    st.markdown("---")
+                    st.subheader("🔎 Verificare Tipuri de Date (DEBUG)")
+                    all_good = True
+                    for k, v in st.session_state['form_data'].items():
+                        # Excludem cheile de tip string, ne concentram pe numerice
+                        if k not in ['liga', 'echipa_gazda', 'echipa_oaspete']: 
+                            # Cautam tipuri care nu sunt float sau int
+                            if not isinstance(v, (float, int)):
+                                st.error(f"❌ Tip de date Ilegal: Cheia `{k}` are valoarea `{v}` de tip `{type(v)}`. Ar trebui sa fie float/int.")
+                                all_good = False
+                            else:
+                                pass # Afisam doar erorile
+                    
+                    # Daca toate tipurile de date sunt corecte, abia atunci rulam din nou
+                    if all_good:
+                        st.info("Toate tipurile de date numerice sunt corecte. Rulam din nou...")
+                        st.experimental_rerun()
+                    else:
+                        st.warning("⚠️ S-au detectat erori de tip de date. Rerun blocat. Corectati manual valorile inainte de a rula analiza.")
+                    
                 else:
                     st.error("Nu s-au putut incarca datele pentru ID-ul selectat.")
             else:
