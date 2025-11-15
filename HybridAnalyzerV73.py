@@ -4,6 +4,8 @@ import numpy as np
 import json
 import os
 import math
+# IMPORTANT: Importăm firestore din modulul firebase_admin
+from firebase_admin import firestore
 
 # --- Global Configuration and Firebase Setup ---
 
@@ -54,7 +56,7 @@ def initialize_firebase():
         FIREBASE_ENABLED = False
         return False
 
-# Attempt to initialize Firebase when the script loads (Bloc robust pentru a preveni blocajul la pornire)
+# Attempt to initialize Firebase when the script loads
 try:
     initialize_firebase()
 except Exception as e:
@@ -378,7 +380,7 @@ def save_to_firebase(data: dict) -> bool:
         st.error(f"❌ Eroare la salvarea in Firestore: {e}")
         return False
 
-# --- Firebase Load Functions ---
+# --- Firebase Load Functions (Pentru pagina de Rapoarte) ---
 
 def load_analysis_ids():
     """Fetches all document IDs from the configured collection."""
@@ -411,3 +413,36 @@ def load_analysis_data(doc_id: str):
     except Exception as e:
         st.error(f"❌ Eroare la incarcarea datelor analizei: {e}")
         return None
+
+# --- NOU: Functie pentru Incarcarea Tuturor Rapoartelor (Pentru reports.py) ---
+def load_all_analysis_data(limit=100):
+    """Fetches key data for all analysis documents."""
+    global FIREBASE_ENABLED, db
+    # Folosim direct clasa firestore importata de la inceput
+    if not FIREBASE_ENABLED or not db or 'firestore' not in globals():
+        return []
+        
+    try:
+        # Sortam după timestamp (cel mai nou primul) și limităm la 100 de documente
+        docs = db.collection(COLLECTION_NAME_NBA).order_by('timestamp', direction=firestore.Query.DESCENDING).limit(limit).stream()
+        
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+            results.append({
+                'ID': doc.id,
+                'Liga': data.get('liga', 'N/A'),
+                'Meci': f"{data.get('gazda', 'N/A')} vs {data.get('oaspete', 'N/A')}",
+                'Linie Originala': f"{data.get('original_line', 0.0):.1f}",
+                'Directia Finala': data.get('final_bet_direction', 'EVAL'),
+                'Actiune KLD': data.get('kld_action', 'EVAL'),
+                'KLD Total': f"{data.get('kld_total', 0.0):.4f}",
+                'Linie Bufferata': f"{data.get('buffered_line', 0.0):.2f}",
+                # Conversie sigură a timestamp-ului
+                'Timestamp': str(data.get('timestamp')),
+                'analysis_markdown': data.get('analysis_markdown') 
+            })
+        return results
+    except Exception as e:
+        print(f"❌ Eroare la citirea datelor de raport din Firestore: {e}") 
+        return []
