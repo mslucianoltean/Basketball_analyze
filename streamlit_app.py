@@ -13,7 +13,7 @@ from HybridAnalyzerV73 import (
 
 st.set_page_config(layout="wide", page_title="Hybrid Analyzer V7.3")
 
-# --- Initializare Stare si Valori Implicite ---
+# --- 1. Initializare Valori Implicite COMPLETE ---
 DEFAULT_FORM_DATA = {
     'liga': "NBA", 'echipa_gazda': "Lakers", 'echipa_oaspete': "Celtics",
     'tp_line_open_hist': 220.5,
@@ -34,6 +34,8 @@ for key in ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']:
     DEFAULT_FORM_DATA[f'hd_close_away_{key}'] = 1.85
 
 
+# --- 2. Initializare Stare Streamlit ---
+
 if 'analysis_output' not in st.session_state:
     st.session_state['analysis_output'] = ""
 if 'result_data' not in st.session_state:
@@ -44,29 +46,30 @@ if 'form_data' not in st.session_state:
     st.session_state['form_data'] = DEFAULT_FORM_DATA.copy()
 
 
-# --- Functie Ajutatoare pentru Populare Formular (VERSIUNEA FINALĂ) ---
+# --- 3. Functie Ajutatoare pentru Populare Formular (ROBUSTĂ) ---
 def get_value(key):
-    """Returnează valoarea din starea sesiunii, forțând conversia la tipul corect și tratând None."""
+    """Returnează valoarea din starea sesiunii, forțând conversia la tipul corect și tratând None/NULL."""
     
-    # 1. Obține valoarea din starea sesiunii sau valoarea implicită
     default_val = DEFAULT_FORM_DATA.get(key)
+    # Folosim .get() pentru a prelua din starea sesiunii, cu default-ul general ca ultim resort
     val = st.session_state['form_data'].get(key, default_val)
 
-    # 2. Gestiunea NULL/NONE sau a valorilor lipsă (cele care cauzează eroarea)
+    # Gestiunea NULL/NONE sau a valorilor lipsa din Firebase
     if val is None or val == 'None' or val == '':
         return default_val
         
-    # 3. Conversia tipurilor (crucială pentru number_input)
+    # Conversia tipurilor (crucială pentru number_input)
     if isinstance(default_val, (float, int)):
         try:
-            # Încercăm să convertim la float/int
             return float(val)
         except (ValueError, TypeError):
-            # Dacă conversia eșuează (e.g., valoarea e 'text'), revenim la valoarea implicită
+            # Dacă conversia eșuează, revenim la valoarea implicită
             return default_val
             
-    # 4. Returnăm valoarea pentru string-uri (text_input)
-    return val
+    # Returnăm valoarea pentru string-uri (text_input)
+    return val 
+
+
 # --- Bara Laterala (Sidebar) ---
 
 with st.sidebar:
@@ -82,14 +85,13 @@ with st.sidebar:
             key='selectbox_id'
         )
 
-       if st.button("Încarcă Analiză pentru Reanaliză"):
+        if st.button("Încarcă Analiză pentru Reanaliză"):
             if selected_id and selected_id != "Firebase Dezactivat" and selected_id != "Eroare la Încărcare":
                 data = load_analysis_data(selected_id)
                 if data:
                     st.success(f"Analiza `{selected_id}` încărcată. Datele au populat formularul principal.")
                     
                     # 1. INITIALIZEAZA CU VALORILE IMPLICITE COMPLETE
-                    # Copiem default-urile ca baza de plecare pentru a avea toate cheile
                     new_form_data = DEFAULT_FORM_DATA.copy()
                     
                     # 2. FUZIONEAZA DATELE VECHI PESTE CELE NOI
@@ -114,13 +116,6 @@ with st.sidebar:
                     st.error("Nu s-au putut încărca datele pentru ID-ul selectat.")
             else:
                 st.warning("Vă rugăm să selectați un ID valid.")
-                    
-                    # RE-RULEAZA APLICATIA PENTRU A ACTUALIZA FORMULARUL
-                    st.experimental_rerun() # Folosim experimental_rerun() pentru compatibilitate cu Streamlit 1.x / Streamlit Cloud
-                else:
-                    st.error("Nu s-au putut încărca datele pentru ID-ul selectat.")
-            else:
-                st.warning("Vă rugăm să selectați un ID valid.")
     else:
         st.info("Funcționalitatea Firebase este dezactivată (Lipsesc st.secrets).")
 
@@ -136,12 +131,11 @@ with st.form(key='hybrid_analysis_form'):
     st.subheader("Detalii Meci")
     col_liga, col_gazda, col_oaspete = st.columns(3)
     
-    # Detalii Meci (Folosesc get_value pentru a prelua valorile din starea sesiunii)
+    # Detalii Meci
     liga = col_liga.text_input("Liga", value=get_value('liga'), key='liga')
     echipa_gazda = col_gazda.text_input("Echipa Gazdă", value=get_value('echipa_gazda'), key='echipa_gazda')
     echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", value=get_value('echipa_oaspete'), key='echipa_oaspete')
 
-    # Dictionar care va fi pasat la run_hybrid_analyzer
     data_input = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': echipa_oaspete}
 
     st.markdown("---")
@@ -178,7 +172,6 @@ with st.form(key='hybrid_analysis_form'):
         
         col1.markdown(f"**{label}**")
         
-        # Atentie: Cheia din data_input trebuie sa fie aceeasi cu cheia de stare
         data_input[f'tp_line_{key}'] = col2.number_input("", min_value=150.0, max_value=300.0, 
                                                           value=get_value(f'tp_line_{key}'), step=0.5, format="%.1f", key=f'tp_line_{key}')
         data_input[f'tp_open_over_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
@@ -243,9 +236,7 @@ with st.form(key='hybrid_analysis_form'):
         st.session_state['analysis_output'] = markdown_output
         st.session_state['result_data'] = result_data
         
-        # Nu este nevoie de rerun la submit, Streamlit se ocupa
         
-
 # --- Zona de Rezultate ---
 
 if st.session_state['analysis_output']:
