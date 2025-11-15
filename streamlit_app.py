@@ -71,7 +71,7 @@ with st.sidebar:
                 data = load_analysis_data(safe_selected_id)
                 
                 if data:
-                    st.success(f"Analiza `{safe_selected_id}` incarcata. Repopularea ar trebui sa fie vizibila.")
+                    st.success(f"Analiza `{safe_selected_id}` incarcata. Repopularea urmeaza imediat...")
                     
                     # Definim TOATE CHEILE PE CARE LE ASTEPTAM
                     all_keys = [
@@ -85,22 +85,33 @@ with st.sidebar:
 
                     new_form_data = {} 
                     if 'date_input' in data:
+                        # Logica de preluare date: 'date_input' ar trebui sa contina valorile
+                        source_data = data['date_input']
+                             
                         for k in all_keys:
-                            v = data['date_input'].get(k)
+                            v = source_data.get(k)
                             if v is not None:
                                 new_form_data[k] = str(v)
-                    
+                    # Adaugam si campurile de baza (liga, gazda, oaspete) care ar putea fi in radacina doc-ului vechi
+                    new_form_data['liga'] = data.get('League', data.get('liga', ''))
+                    new_form_data['echipa_gazda'] = data.get('HomeTeam', data.get('echipa_gazda', ''))
+                    new_form_data['echipa_oaspete'] = data.get('AwayTeam', data.get('echipa_oaspete', ''))
+
+
                     # 1. ACTUALIZARE STARE
                     st.session_state['form_data'] = new_form_data
                     st.session_state['result_data'] = data
                     st.session_state['analysis_output'] = data.get('analysis_markdown', "⚠️ Raport Detaliat Lipsă. Rulați analiza pentru a genera raportul nou.")
 
-                    # 2. INCREMENTARE SUFIX CHEIE CRITICĂ (FORTEAZA REDESENAREA)
+                    # 2. INCREMENTARE SUFIX CHEIE CRITICĂ
                     st.session_state['key_suffix'] += 1 
                     
                     # 3. AFISARE JSON PENTRU DEBUGGING
                     st.subheader("Date Analiza Brute (Firebase - Debugging)")
                     st.json(data) 
+
+                    # 4. PASUL CRITIC: Oprim scriptul curent si il repornim
+                    st.experimental_rerun() 
                     
                 else:
                     st.error(f"❌ EROARE CRITICA: S-a selectat ID-ul `{safe_selected_id}`, dar documentul nu a putut fi găsit/încărcat (funcția load_analysis_data a returnat None).")
