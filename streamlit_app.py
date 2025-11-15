@@ -82,24 +82,38 @@ with st.sidebar:
             key='selectbox_id'
         )
 
-        if st.button("Încarcă Analiză pentru Reanaliză"):
+       if st.button("Încarcă Analiză pentru Reanaliză"):
             if selected_id and selected_id != "Firebase Dezactivat" and selected_id != "Eroare la Încărcare":
                 data = load_analysis_data(selected_id)
                 if data:
                     st.success(f"Analiza `{selected_id}` încărcată. Datele au populat formularul principal.")
                     
-                    # 1. ACTUALIZEAZĂ STAREA SESIUNII CU NOILE DATE
-                    # Actualizeaza form_data pentru a popula formularul
-                    if 'date_input' in data:
-                        st.session_state['form_data'].update(data['date_input'])
+                    # 1. INITIALIZEAZA CU VALORILE IMPLICITE COMPLETE
+                    # Copiem default-urile ca baza de plecare pentru a avea toate cheile
+                    new_form_data = DEFAULT_FORM_DATA.copy()
                     
-                    # Actualizeaza starea pentru raport
+                    # 2. FUZIONEAZA DATELE VECHI PESTE CELE NOI
+                    if 'date_input' in data:
+                        # Suprascrie valorile implicite doar cu ceea ce s-a gasit in Firebase
+                        new_form_data.update(data['date_input'])
+                    
+                    # 3. ACTUALIZEAZĂ STAREA SESIUNII CU NOUA LISTĂ DE CHEI COMPLETE
+                    st.session_state['form_data'] = new_form_data
+                    
+                    # 4. Actualizeaza starea pentru raport
                     st.session_state['analysis_output'] = data.get('analysis_markdown', "Raportul formatat nu a fost găsit în datele salvate.")
                     st.session_state['result_data'] = data
                     
                     # Afișează datele brute in sidebar
                     st.subheader("Date Analiză Brute (Firebase)")
                     st.json(data)
+                    
+                    # RE-RULEAZA APLICATIA PENTRU A ACTUALIZA FORMULARUL
+                    st.experimental_rerun() 
+                else:
+                    st.error("Nu s-au putut încărca datele pentru ID-ul selectat.")
+            else:
+                st.warning("Vă rugăm să selectați un ID valid.")
                     
                     # RE-RULEAZA APLICATIA PENTRU A ACTUALIZA FORMULARUL
                     st.experimental_rerun() # Folosim experimental_rerun() pentru compatibilitate cu Streamlit 1.x / Streamlit Cloud
