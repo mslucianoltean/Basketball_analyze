@@ -18,6 +18,8 @@ if 'analysis_output' not in st.session_state: st.session_state['analysis_output'
 if 'result_data' not in st.session_state: st.session_state['result_data'] = {}
 # INITIALIZARE CU DICTIONAR GOL - FARA VALORI DEFAULT
 if 'form_data' not in st.session_state: st.session_state['form_data'] = {}
+# MARCAJUL CRITIC: Cand e True, datele noi au fost incarcate din Firebase
+if 'data_loaded' not in st.session_state: st.session_state['data_loaded'] = False 
     
 # --- 2. Functie Ajutatoare pentru Populare Formular (Returneaza string gol) ---
 def get_value(key):
@@ -60,11 +62,11 @@ with st.sidebar:
             index=None,
             key='selectbox_id'
         )
-
-        if st.button("Incarca Analiza pentru Reanaliza"):
-            # 1. CURATARE ID SELECTAT
+        
+        # ATENTIE: Daca repopularea esueaza din nou, vom folosi RERUN cu o cheie unica
+        if st.button("Incarca Analiza pentru Repopulare (Nou)"):
             if selected_id:
-                safe_selected_id = selected_id.strip() # CURATARE SPATII ALBE
+                safe_selected_id = selected_id.strip()
             else:
                 safe_selected_id = None
             
@@ -72,7 +74,7 @@ with st.sidebar:
                 data = load_analysis_data(safe_selected_id)
                 
                 if data:
-                    st.success(f"Analiza `{safe_selected_id}` incarcata. **Datele sunt in stare. Apasati pe un camp de input pentru a forta repopularea.**")
+                    st.success(f"Analiza `{safe_selected_id}` incarcata. **Repornire forțată...**")
                     
                     # Definim TOATE CHEILE PE CARE LE ASTEPTAM
                     all_keys = [
@@ -84,29 +86,26 @@ with st.sidebar:
                             f'hd_line_{key_sufix}', f'hd_open_home_{key_sufix}', f'hd_close_home_{key_sufix}', f'hd_open_away_{key_sufix}', f'hd_close_away_{key_sufix}'
                         ])
 
-                    new_form_data = {} # PORNIM DE LA DICTIONAR GOL
+                    new_form_data = {} 
 
                     if 'date_input' in data:
-                        # Repopularea efectiva: preia doar cheile pe care le asteptam
                         for k in all_keys:
                             v = data['date_input'].get(k)
                             if v is not None:
                                 new_form_data[k] = str(v)
                     
-                    # 1. ACTUALIZARE STARE (Sursa de adevar)
+                    # 1. ACTUALIZARE STARE
                     st.session_state['form_data'] = new_form_data
-                    
-                    # 2. ACTUALIZARE RAPORT
-                    markdown_output = data.get('analysis_markdown', "⚠️ Raport Detaliat Lipsă: Acest document a fost salvat înainte de ultima actualizare. Repopularea a fost efectuată. Rulați analiza pentru a genera raportul nou.")
-                    st.session_state['analysis_output'] = markdown_output
                     st.session_state['result_data'] = data
+                    st.session_state['analysis_output'] = data.get('analysis_markdown', "⚠️ Raport Detaliat Lipsă. Rulați analiza pentru a genera raportul nou.")
+
+                    # 2. SETARE MARCAJ DE INCARCARE
+                    st.session_state['data_loaded'] = True 
                     
-                    # 3. AFISAREA JSON
-                    st.subheader("Date Analiza Brute (Firebase)")
-                    st.json(data) 
+                    # 3. REPORNIRE SCRIPT PENTRU A FORTA REDESENAREA WIDGET-URILOR CU VALOAREA NOUA
+                    st.rerun() 
                     
                 else:
-                    # MESAJ DE ESEC NOU, EXPLICIT
                     st.error(f"❌ EROARE CRITICA: S-a selectat ID-ul `{safe_selected_id}`, dar documentul nu a putut fi găsit/încărcat (funcția load_analysis_data a returnat None).")
             else:
                 st.warning("Va rugam sa selectati un ID valid.")
@@ -130,6 +129,14 @@ data_input_str = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': 
 
 st.markdown("---")
 
+# AFISARE JSON (Debugging) - AFISAM DOAR DACA DATELE AU FOST INCARCATE
+if st.session_state.get('data_loaded'):
+    st.subheader("Date Analiza Brute (Firebase - Debugging)")
+    st.json(st.session_state.get('result_data', {}))
+    st.session_state['data_loaded'] = False # Resetam dupa afisare
+st.markdown("---")
+
+
 st.subheader("Total Puncte (Total Points)")
 key_hist = 'tp_line_open_hist'
 tp_line_open_hist = st.columns([1, 5])[0].text_input("Open Istoric", value=get_value(key_hist), key=key_hist) 
@@ -150,7 +157,6 @@ for key, label in zip(tp_lines_keys, tp_lines_labels):
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     col1.markdown(f"**{label}**")
     
-    # Folosim key ca label si il ascundem pentru a preveni avertismentele
     data_input_str[f'tp_line_{key}'] = col2.text_input(f'tp_line_{key}', value=get_value(f'tp_line_{key}'), key=f'tp_line_{key}', label_visibility="hidden") 
     data_input_str[f'tp_open_over_{key}'] = col3.text_input(f'tp_open_over_{key}', value=get_value(f'tp_open_over_{key}'), key=f'tp_open_over_{key}', label_visibility="hidden")
     data_input_str[f'tp_close_over_{key}'] = col4.text_input(f'tp_close_over_{key}', value=get_value(f'tp_close_over_{key}'), key=f'tp_close_over_{key}', label_visibility="hidden")
@@ -174,7 +180,6 @@ for key, label in zip(hd_lines_keys, tp_lines_labels):
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     col1.markdown(f"**{label}**")
     
-    # Folosim key ca label si il ascundem pentru a preveni avertismentele
     data_input_str[f'hd_line_{key}'] = col2.text_input(f'hd_line_{key}', value=get_value(f'hd_line_{key}'), key=f'hd_line_{key}', label_visibility="hidden")
     data_input_str[f'hd_open_home_{key}'] = col3.text_input(f'hd_open_home_{key}', value=get_value(f'hd_open_home_{key}'), key=f'hd_open_home_{key}', label_visibility="hidden")
     data_input_str[f'hd_close_home_{key}'] = col4.text_input(f'hd_close_home_{key}', value=get_value(f'hd_close_home_{key}'), key=f'hd_close_home_{key}', label_visibility="hidden")
