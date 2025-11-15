@@ -10,16 +10,19 @@ from HybridAnalyzerV73 import (
     COLLECTION_NAME_NBA
 )
 
+# Setări Pagina
 st.set_page_config(layout="wide", page_title="Hybrid Analyzer V7.3")
 
 # --- 1. Initializare Stare Streamlit ---
+# Starea Sesiunii (Session State) menține datele între rulări.
 
 if 'analysis_output' not in st.session_state: st.session_state['analysis_output'] = ""
 if 'result_data' not in st.session_state: st.session_state['result_data'] = {}
 if 'form_data' not in st.session_state: st.session_state['form_data'] = {}
+# Sufixul unic pentru cheile widget-urilor, forțează repopularea
 if 'key_suffix' not in st.session_state: st.session_state['key_suffix'] = 0 
     
-# --- 2. Functie Ajutatoare pentru Populare Formular (Returneaza string gol) ---
+# --- 2. Functie Ajutatoare pentru Populare Formular ---
 def get_value(key):
     """Citeste valoarea din starea sesiunii. Daca lipseste, returneaza string gol."""
     val = st.session_state['form_data'].get(key)
@@ -74,27 +77,22 @@ with st.sidebar:
                     
                     new_form_data = {} 
 
-                    # 1. POPULAREA CAMPURILOR DE BAZA (ACESTEA AU FUNCTIONAT)
+                    # 1. POPULAREA CAMPURILOR DE BAZA
                     new_form_data['liga'] = data.get('League', data.get('liga', ''))
                     new_form_data['echipa_gazda'] = data.get('HomeTeam', data.get('echipa_gazda', ''))
                     new_form_data['echipa_oaspete'] = data.get('AwayTeam', data.get('echipa_oaspete', ''))
 
                     
-                    # 2. POPULAREA COTELOR (LOGICA NOUA DE EXTRACȚIE)
-                    
-                    # Sursa principala: 'date_input' (unde ar trebui sa fie salvate valorile din formular)
+                    # 2. POPULAREA COTELOR (LOGICA DE EXTRACȚIE MULTI-SURSĂ)
                     source_input = data.get('date_input', {})
-                    # Sursa secundara: structura de linii (daca 'date_input' e incomplet/lipseste)
                     source_tp = data.get('All_Total_Lines', {})
                     source_hd = data.get('All_Handicap_Lines', {})
                     
                     tp_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
 
-                    # Total Puncte
+                    # Open Istoric
                     key_hist = 'tp_line_open_hist'
-                    # Prioritate pentru valoarea din 'date_input'
                     hist_val = source_input.get(key_hist)
-                    # Daca lipseste, incercam sa o deducem din 'All_Total_Lines'['close'] (open_line_value)
                     if hist_val is None and 'close' in source_tp:
                          hist_val = source_tp['close'].get('open_line_value')
 
@@ -102,15 +100,11 @@ with st.sidebar:
 
 
                     for key in tp_lines_keys:
-                        # Reconstruim cheile asa cum sunt in formularul Streamlit
-                        
                         # --- Total Points (TP) ---
-                        # Linia (Ex: 228.5)
                         key_tp_line = f'tp_line_{key}'
                         val_tp_line = source_input.get(key_tp_line) or source_tp.get(key, {}).get('line')
                         new_form_data[key_tp_line] = str(val_tp_line) if val_tp_line is not None else ""
 
-                        # Open/Close Over/Under
                         key_tp_open_over = f'tp_open_over_{key}'
                         val_tp_open_over = source_input.get(key_tp_open_over) or source_tp.get(key, {}).get('over_open')
                         new_form_data[key_tp_open_over] = str(val_tp_open_over) if val_tp_open_over is not None else ""
@@ -129,12 +123,10 @@ with st.sidebar:
 
 
                         # --- Handicap (HD) ---
-                        # Linia (Ex: 1.5)
                         key_hd_line = f'hd_line_{key}'
                         val_hd_line = source_input.get(key_hd_line) or source_hd.get(key, {}).get('line')
                         new_form_data[key_hd_line] = str(val_hd_line) if val_hd_line is not None else ""
 
-                        # Open/Close Home/Away
                         key_hd_open_home = f'hd_open_home_{key}'
                         val_hd_open_home = source_input.get(key_hd_open_home) or source_hd.get(key, {}).get('home_open')
                         new_form_data[key_hd_open_home] = str(val_hd_open_home) if val_hd_open_home is not None else ""
@@ -179,6 +171,14 @@ st.title("🏀 Hybrid Analyzer V7.3 - Analiza Baschet")
 st.markdown("Introduceti cotele de deschidere (Open) si inchidere (Close) pentru 7 linii adiacente.")
 
 current_suffix = st.session_state['key_suffix'] 
+
+# --- DEBUGGING CRITIC (Adăugat aici) ---
+if st.session_state['form_data']:
+    st.subheader("DEBUG: Date Formular (Verificați cheile cotelor aici)")
+    st.json(st.session_state['form_data'])
+    st.markdown("---")
+# ----------------------------------------
+
 
 st.subheader("Detalii Meci")
 col_liga, col_gazda, col_oaspete = st.columns(3)
@@ -278,8 +278,14 @@ if st.button("🔥 Ruleaza Analiza Hibrid V7.3"):
 if st.session_state['analysis_output']:
     st.markdown("---")
     st.header("✨ Rezultate Analiza")
-    
-    st.markdown(st.session_state['analysis_output'])
+
+    # Logica de avertizare daca raportul este prea scurt (problema de analiza, nu Streamlit)
+    if len(st.session_state['analysis_output']) < 100 and "Analiza detaliata..." in st.session_state['analysis_output']:
+        st.error("❌ EROARE INTERNĂ: Raportul a fost generat incomplet (Lipsesc detaliile de analiză). Vă rugăm verificați funcția `run_hybrid_analyzer` în `HybridAnalyzerV73.py`.")
+        st.code(st.session_state['analysis_output'])
+    else:
+        # Afișarea raportului complet
+        st.markdown(st.session_state['analysis_output'])
     
     final_dir = st.session_state['result_data'].get('final_bet_direction')
     
