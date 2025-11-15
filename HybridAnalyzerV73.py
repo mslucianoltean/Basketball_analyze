@@ -146,27 +146,29 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         tp_data = {}
         for line in tp_lines:
             tp_data[line] = {
-                'line': data.get(f'tp_line_{line}', 0.0),
-                'open_over': data.get(f'tp_open_over_{line}', 1.0),
-                'close_over': data.get(f'tp_close_over_{line}', 1.0),
-                'open_under': data.get(f'tp_open_under_{line}', 1.0),
-                'close_under': data.get(f'tp_close_under_{line}', 1.0)
+                # Folosim float() pentru a garanta tipul
+                'line': float(data.get(f'tp_line_{line}', 0.0)),
+                'open_over': float(data.get(f'tp_open_over_{line}', 1.0)),
+                'close_over': float(data.get(f'tp_close_over_{line}', 1.0)),
+                'open_under': float(data.get(f'tp_open_under_{line}', 1.0)),
+                'close_under': float(data.get(f'tp_close_under_{line}', 1.0))
             }
         
         # Historical Open Line 
         close_line_val = tp_data.get('close', {}).get('line', 0.0)
-        historical_open_line = data.get('tp_line_open_hist', close_line_val) 
+        historical_open_line = float(data.get('tp_line_open_hist', close_line_val)) 
         
         # Handicap Data (HD)
         hd_lines = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
         hd_data = {}
         for line in hd_lines:
             hd_data[line] = {
-                'line': data.get(f'hd_line_{line}', 0.0),
-                'open_home': data.get(f'hd_open_home_{line}', 1.0),
-                'close_home': data.get(f'hd_close_home_{line}', 1.0),
-                'open_away': data.get(f'hd_open_away_{line}', 1.0),
-                'close_away': data.get(f'hd_close_away_{line}', 1.0)
+                # Folosim float() pentru a garanta tipul
+                'line': float(data.get(f'hd_line_{line}', 0.0)),
+                'open_home': float(data.get(f'hd_open_home_{line}', 1.0)),
+                'close_home': float(data.get(f'hd_close_home_{line}', 1.0)),
+                'open_away': float(data.get(f'hd_open_away_{line}', 1.0)),
+                'close_away': float(data.get(f'hd_close_away_{line}', 1.0))
             }
         
     except Exception as e:
@@ -180,7 +182,7 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
         consensus_line_change = historical_open_line - initial_line_tp
     elif initial_line_tp > historical_open_line:
         consensus_direction = "UNDER"
-        consensus_line_change = initial_line_tp - historical_open_line
+        consensus_line_change = initial_line_tp - initial_line_tp
     else:
         consensus_direction = "STABLE"
         consensus_line_change = 0.0
@@ -418,7 +420,6 @@ def load_analysis_data(doc_id: str):
 def load_all_analysis_data(limit=100):
     """Fetches key data for all analysis documents."""
     global FIREBASE_ENABLED, db
-    # Folosim direct clasa firestore importata de la inceput
     if not FIREBASE_ENABLED or not db or 'firestore' not in globals():
         return []
         
@@ -438,7 +439,6 @@ def load_all_analysis_data(limit=100):
                 'Actiune KLD': data.get('kld_action', 'EVAL'),
                 'KLD Total': f"{data.get('kld_total', 0.0):.4f}",
                 'Linie Bufferata': f"{data.get('buffered_line', 0.0):.2f}",
-                # Conversie sigură a timestamp-ului
                 'Timestamp': str(data.get('timestamp')),
                 'analysis_markdown': data.get('analysis_markdown') 
             })
