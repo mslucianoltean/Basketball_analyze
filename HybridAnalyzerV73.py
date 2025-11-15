@@ -32,11 +32,11 @@ def initialize_firebase():
         if 'firebase_admin' not in globals():
             return False
             
-        # 2. Verifica si incarca credențialele
+        # 2. Verifica si incarca credentialele
         if "firestore_creds" in st.secrets:
             cred = credentials.Certificate(dict(st.secrets["firestore_creds"]))
         else:
-            print("⚠️ Credențialele Firebase ('firestore_creds') nu sunt găsite în st.secrets.")
+            print("⚠️ Credentialele Firebase ('firestore_creds') nu sunt gasite in st.secrets.")
             return False
 
         # 3. Initializare aplicatie Firebase
@@ -44,12 +44,12 @@ def initialize_firebase():
             firebase_admin.initialize_app(cred)
             db = firestore.client()
             FIREBASE_ENABLED = True
-            print("✅ Conexiune Firebase reușită.")
+            print("✅ Conexiune Firebase reusita.")
             return True
             
     except Exception as e:
         # Trateaza orice eroare de conexiune/initializare FARA a bloca aplicatia
-        print(f"❌ Eroare fatală la inițializarea Firebase: {e}") 
+        print(f"❌ Eroare fatala la initializarea Firebase: {e}") 
         # Dezactiveaza Firebase in caz de eroare
         FIREBASE_ENABLED = False
         return False
@@ -59,7 +59,7 @@ try:
     initialize_firebase()
 except Exception as e:
     FIREBASE_ENABLED = False
-    print(f"Eroare de inițializare Firebase global: {e}")
+    print(f"Eroare de initializare Firebase global: {e}")
 
 # --- Core Hybrid Analyzer Functions V7.3 ---
 
@@ -73,7 +73,7 @@ def calculate_kld_bidimensional(
         treshold_kld_limit: float = 0.65
     ) -> (str, float):
     """
-    Calculează Decizia Finală KLD Bidimensional V7.3.
+    Calculeaza Decizia Finala KLD Bidimensional V7.3.
     """
     
     avg_kld = (kld_total + kld_handicap) / 2
@@ -168,7 +168,7 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
             }
         
     except Exception as e:
-        return f"❌ **Eroare la prelucrarea datelor de intrare:** Asigurați-vă că toate câmpurile numerice sunt completate corect.\nDetalii: {e}", {}
+        return f"❌ **Eroare la prelucrarea datelor de intrare:** Asigurati-va ca toate campurile numerice sunt completate corect.\nDetalii: {e}", {}
 
     # --- 2. Consensus Determination ---
     initial_line_tp = tp_data['close']['line']
@@ -290,38 +290,38 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
     # --- Formatting the Final Report ---
     
     output_markdown = f"""
-## 📊 Raport Analiză Hibrid V7.3 - {data.get('liga', 'N/A')}
+## 📊 Raport Analiza Hibrid V7.3 - {data.get('liga', 'N/A')}
 ### 📜 Meci: **{data.get('echipa_gazda', 'N/A')} vs {data.get('echipa_oaspete', 'N/A')}**
 
 ---
 
-### 1. 🔍 Sumar Mișcare de Linie (Consensus)
-* Linie Open Istorică: **{historical_open_line:.1f}**
-* Linie Close (Curentă): **{initial_line_tp:.1f}**
-* Diferență: **{consensus_line_change:.2f} puncte**
-* **Consensusul Pieței:** Piața a împins linia spre **{consensus_direction}** (Linia a mers {('JOS' if consensus_direction == 'OVER' else 'SUS')}).
-* Cota de Referință (Close): **{final_odd if final_odd != 0.0 else 'N/A'}**
+### 1. 🔍 Sumar Miscare de Linie (Consensus)
+* Linie Open Istorica: **{historical_open_line:.1f}**
+* Linie Close (Curenta): **{initial_line_tp:.1f}**
+* Diferenta: **{consensus_line_change:.2f} puncte**
+* **Consensusul Pietei:** Piata a impins linia spre **{consensus_direction}** (Linia a mers {('JOS' if consensus_direction == 'OVER' else 'SUS')}).
+* Cota de Referinta (Close): **{final_odd if final_odd != 0.0 else 'N/A'}**
 
 ---
 
-### 2. 📉 Divergența KLD (Kullback-Leibler Divergence)
-| Market | KLD Mediu (Absolut) | Pragul de Semnal | Semnificație |
+### 2. 📉 Divergenta KLD (Kullback-Leibler Divergence)
+| Market | KLD Mediu (Absolut) | Pragul de Semnal | Semnificatie |
 | :--- | :---: | :---: | :--- |
-| **Total Points (TP)** | **{final_kld_total:.4f}** | 0.25 (INVERT) | Măsoară forța și direcția mișcării. |
-| **Handicap (HD)** | **{final_kld_handicap:.4f}** | 0.40 (OVERRIDE) | Măsoară stabilitatea și riscul pieței de Handicap. |
+| **Total Points (TP)** | **{final_kld_total:.4f}** | 0.25 (INVERT) | Masoara forta si directia miscarii. |
+| **Handicap (HD)** | **{final_kld_handicap:.4f}** | 0.40 (OVERRIDE) | Masoara stabilitatea si riscul pietei de Handicap. |
 
 ---
 
-### 3. 🎯 DECIZIA FINALĂ HIBRID V7.3
-* **Acțiunea KLD Total Points:** {kld_action}
-* **Decizia KLD Bidimensională (FINAL):** **{kld_action}**
+### 3. 🎯 DECIZIA FINALA HIBRID V7.3
+* **Actiunea KLD Total Points:** {kld_action}
+* **Decizia KLD Bidimensionala (FINAL):** **{kld_action}**
 * **Factor Buffer V7.3:** **{buffer_value:.2f} puncte**
 
-| Acțiunea | Semnificație | Propunere |
+| Actiunea | Semnificatie | Propunere |
 | :--- | :--- | :--- |
-| **KEEP** | KLD slab, încredere în consensus. | **{consensus_direction}** |
-| **EVAL** | KLD mediu, necesită analiză manuală. | **{consensus_direction} (ATENȚIE)** |
-| **INVERT** | KLD puternic, pariază ÎMPOTRIVA consensusului. | **{final_bet_direction}** |
+| **KEEP** | KLD slab, incredere in consensus. | **{consensus_direction}** |
+| **EVAL** | KLD mediu, necesita analiza manuala. | **{consensus_direction} (ATENTIE)** |
+| **INVERT** | KLD puternic, pariaza IMPOTRIVA consensusului. | **{final_bet_direction}** |
 | **OVERRIDE** | KLD foarte puternic, semnal maxim de Trap/Inversare. | **{final_bet_direction}** |
 | **SKIP** | KLD nesigur sau risc dublu. | **NU PARIA** |
 
@@ -329,12 +329,12 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
 
 ### 4. ✅ PROPUNEREA DE PARIU (Total Points)
 
-* **Direcția Propusă:** **{final_bet_direction}**
-* **Linia Originală:** **{final_line:.1f}**
-* **Linia Bufferată V7.3:** **{buffered_line:.2f}**
-* **Cota de Referință:** **{final_odd if final_odd != 0.0 else 'N/A'}**
+* **Directia Propusa:** **{final_bet_direction}**
+* **Linia Originala:** **{final_line:.1f}**
+* **Linia Bufferata V7.3:** **{buffered_line:.2f}**
+* **Cota de Referinta:** **{final_odd if final_odd != 0.0 else 'N/A'}**
 
-> 💡 **Instrucțiune:** Caută linia **{final_bet_direction}** la o valoare cât mai apropiată de **{buffered_line:.2f}** cu o cotă de minim **{final_odd if final_odd != 0.0 else 'N/A'}** sau mai mare.
+> 💡 **Instructiune:** Cauta linia **{final_bet_direction}** la o valoare cat mai apropiata de **{buffered_line:.2f}** cu o cota de minim **{final_odd if final_odd != 0.0 else 'N/A'}** sau mai mare.
 """
     
     # Data structure for saving to Firebase
@@ -363,7 +363,7 @@ def run_hybrid_analyzer(data: dict) -> (str, dict):
 def save_to_firebase(data: dict) -> bool:
     """Saves the final analysis data to the Firestore collection defined by COLLECTION_NAME_NBA."""
     if not FIREBASE_ENABLED or not db:
-        st.error("❌ Salvarea a eșuat: Conexiunea Firebase este dezactivată.")
+        st.error("❌ Salvarea a esuat: Conexiunea Firebase este dezactivata.")
         return False
         
     try:
@@ -372,10 +372,10 @@ def save_to_firebase(data: dict) -> bool:
         doc_name = doc_name.replace(" ", "_").replace("/", "-")
         
         db.collection(COLLECTION_NAME_NBA).document(doc_name).set(data)
-        st.success(f"✅ Analiza a fost salvată cu succes în Firebase sub ID-ul: `{doc_name}`")
+        st.success(f"✅ Analiza a fost salvata cu succes in Firebase sub ID-ul: `{doc_name}`")
         return True
     except Exception as e:
-        st.error(f"❌ Eroare la salvarea în Firestore: {e}")
+        st.error(f"❌ Eroare la salvarea in Firestore: {e}")
         return False
 
 # --- Firebase Load Functions ---
@@ -393,7 +393,7 @@ def load_analysis_ids():
         return ids[:100]
     except Exception as e:
         st.error(f"❌ Eroare la citirea ID-urilor din Firestore: {e}") 
-        return ["Eroare la Încărcare"]
+        return ["Eroare la Incarcare"]
 
 def load_analysis_data(doc_id: str):
     """Fetches a single analysis document by its ID."""
@@ -406,8 +406,8 @@ def load_analysis_data(doc_id: str):
         if doc.exists:
             return doc.to_dict()
         else:
-            st.warning(f"ID-ul {doc_id} nu a fost găsit.")
+            st.warning(f"ID-ul {doc_id} nu a fost gasit.")
             return None
     except Exception as e:
-        st.error(f"❌ Eroare la încărcarea datelor analizei: {e}")
+        st.error(f"❌ Eroare la incarcarea datelor analizei: {e}")
         return None
