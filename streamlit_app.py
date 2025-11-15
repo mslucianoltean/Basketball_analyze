@@ -59,25 +59,25 @@ if 'rerun_key_suffix' not in st.session_state:
 def get_value(key):
     """
     Returneaza valoarea din starea sesiunii, garantand tipul de date corect.
+    Foloseste exclusiv st.session_state['form_data'] ca sursă de adevăr.
     """
     
     default_val = DEFAULT_FORM_DATA.get(key)
-    # ATENTIE: Folosim .get() pe 'form_data', care e sursa de adevar
     val = st.session_state['form_data'].get(key) 
     
     if val is None or val == '' or str(val).lower() == 'none':
         return default_val
     
+    # Pentru tipuri numerice (float/int), forțăm float nativ Python
     if isinstance(default_val, (float, int)):
         try:
-            # Fortam totul la float standard Python
             return float(val) 
         except (ValueError, TypeError):
             return default_val
             
+    # Pentru string-uri, returnăm valoarea direct din form_data
     if isinstance(default_val, str):
-        # Aici folosim valoarea din starea sesiunii pentru text_input, daca exista
-        return str(st.session_state.get(key, val))
+        return str(val)
         
     return val if val is not None else default_val
 
@@ -108,16 +108,10 @@ with st.sidebar:
                     if 'date_input' in data:
                         new_form_data.update(data['date_input'])
                     
-                    # 1. ACTUALIZARE FORM_DATA (Pentru number_input)
+                    # 1. ACTUALIZARE FORM_DATA (Sursa de adevar)
                     st.session_state['form_data'] = new_form_data
                     
-                    # 2. ACTUALIZARE CHEI TEXT (Pentru text_input - Populeaza Gazda/Oaspete/Liga)
-                    # Aici fortam popularea campurilor de text care sunt mai incapatanate
-                    st.session_state['liga'] = new_form_data.get('liga', 'NBA')
-                    st.session_state['echipa_gazda'] = new_form_data.get('echipa_gazda', 'Lakers')
-                    st.session_state['echipa_oaspete'] = new_form_data.get('echipa_oaspete', 'Celtics')
-                    
-                    # 3. INCREMENTAM CHEIA PENTRU A FORȚA RE-RENDERIZAREA CÂMPURILOR NUMERICE
+                    # 2. INCREMENTAM CHEIA PENTRU A FORȚA RE-RENDERIZAREA
                     st.session_state['rerun_key_suffix'] += 1
                     
                     st.session_state['analysis_output'] = data.get('analysis_markdown', "Raportul formatat nu a fost gasit in datele salvate.")
@@ -126,7 +120,7 @@ with st.sidebar:
                     st.subheader("Date Analiza Brute (Firebase)")
                     st.json(data)
                     
-                    # BLOC DE VERIFICARE TIPURI DE DATE CRITICAL
+                    # BLOC DE CURATARE TIPURI DE DATE CRITICAL
                     st.markdown("---")
                     st.subheader("🔎 Curățare Tipuri de Date (FINAL CHECK)")
                     all_good = True
@@ -134,7 +128,7 @@ with st.sidebar:
                     for k, v in st.session_state['form_data'].items():
                         if k not in ['liga', 'echipa_gazda', 'echipa_oaspete']:
                             try:
-                                # Forțăm conversia la float nativ Python
+                                # Fortam conversia la float nativ Python
                                 st.session_state['form_data'][k] = float(v)
                             except Exception as e:
                                 st.error(f"❌ Eșec Conversie: Cheia `{k}` (Tip: `{type(v)}`) nu poate fi convertită la float. Eroare: {e}")
@@ -159,140 +153,130 @@ with st.sidebar:
 st.title("🏀 Hybrid Analyzer V7.3 - Analiza Baschet")
 st.markdown("Introduceti cotele de deschidere (Open) si inchidere (Close) pentru 7 linii adiacente.")
 
-# Cheia de sufis se extrage O SINGURĂ dată
 current_key_suffix = str(st.session_state['rerun_key_suffix'])
 
+# --- Formular (ELIMINAT st.form) ---
 
-# --- Formular de Input ---
-with st.form(key='hybrid_analysis_form'):
+st.subheader("Detalii Meci")
+col_liga, col_gazda, col_oaspete = st.columns(3)
+
+# Detalii Meci - Folosim get_value care citeste din form_data
+liga = col_liga.text_input("Liga", 
+                           value=get_value('liga'), 
+                           key='liga')
+echipa_gazda = col_gazda.text_input("Echipa Gazda", 
+                                    value=get_value('echipa_gazda'), 
+                                    key='echipa_gazda')
+echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", 
+                                       value=get_value('echipa_oaspete'), 
+                                       key='echipa_oaspete')
+
+data_input = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': echipa_oaspete}
+
+st.markdown("---")
+
+# --- Total Puncte ---
+st.subheader("Total Puncte (Over/Under) - 7 Linii")
+
+# Header
+col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns(6)
+col_h1.markdown("**Linia**")
+col_h2.markdown("**Valoare**")
+col_h3.markdown("**Over Open**")
+col_h4.markdown("**Over Close**")
+col_h5.markdown("**Under Open**")
+col_h6.markdown("**Under Close**")
+
+# Campul istoric open (V7.3 specific)
+st.markdown("---")
+st.subheader("Linia Open Istorica")
+col_open_hist, _ = st.columns([1, 5])
+
+key_hist = 'tp_line_open_hist'
+tp_line_open_hist = col_open_hist.number_input("Open Istoric", min_value=150.0, max_value=300.0, 
+                                              value=get_value(key_hist), step=0.5, format="%.1f", 
+                                              key=key_hist + current_key_suffix) 
+data_input[key_hist] = tp_line_open_hist
+st.markdown("---")
+
+tp_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
+tp_lines_labels = ['Close Line', '-3 pts (M3)', '-2 pts (M2)', '-1 pts (M1)', '+1 pts (P1)', '+2 pts (P2)', '+3 pts (P3)']
+
+# Liniile TP
+for key, label in zip(tp_lines_keys, tp_lines_labels):
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
-    st.subheader("Detalii Meci")
-    col_liga, col_gazda, col_oaspete = st.columns(3)
+    col1.markdown(f"**{label}**")
     
-    # Detalii Meci - Folosim direct starea sesiunii pentru VALOARE
-    liga = col_liga.text_input("Liga", 
-                               value=st.session_state.get('liga', get_value('liga')), 
-                               key='liga')
-    echipa_gazda = col_gazda.text_input("Echipa Gazda", 
-                                        value=st.session_state.get('echipa_gazda', get_value('echipa_gazda')), 
-                                        key='echipa_gazda')
-    echipa_oaspete = col_oaspete.text_input("Echipa Oaspete", 
-                                           value=st.session_state.get('echipa_oaspete', get_value('echipa_oaspete')), 
-                                           key='echipa_oaspete')
+    data_input[f'tp_line_{key}'] = col2.number_input("", min_value=150.0, max_value=300.0, 
+                                                      value=get_value(f'tp_line_{key}'), step=0.5, format="%.1f", 
+                                                      key=f'tp_line_{key}' + current_key_suffix) 
+    data_input[f'tp_open_over_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
+                                                           value=get_value(f'tp_open_over_{key}'), step=0.01, format="%.2f", 
+                                                           key=f'tp_open_over_{key}' + current_key_suffix)
+    data_input[f'tp_close_over_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
+                                                            value=get_value(f'tp_close_over_{key}'), step=0.01, format="%.2f", 
+                                                            key=f'tp_close_over_{key}' + current_key_suffix)
+    data_input[f'tp_open_under_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
+                                                            value=get_value(f'tp_open_under_{key}'), step=0.01, format="%.2f", 
+                                                            key=f'tp_open_under_{key}' + current_key_suffix)
+    data_input[f'tp_close_under_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
+                                                             value=get_value(f'tp_close_under_{key}'), step=0.01, format="%.2f", 
+                                                             key=f'tp_close_under_{key}' + current_key_suffix)
 
-    # Colectam datele de intrare (text_input nu actualizeaza automat form_data la reroll, deci le preluam manual)
-    data_input = {'liga': liga, 'echipa_gazda': echipa_gazda, 'echipa_oaspete': echipa_oaspete}
+st.markdown("---")
 
-    st.markdown("---")
+# --- Handicap ---
+st.subheader("Handicap (Home/Away) - 7 Linii")
+
+# Header Handicap
+col_hh1, col_hh2, col_hh3, col_hh4, col_hh5, col_hh6 = st.columns(6)
+col_hh1.markdown("**Linia**")
+col_hh2.markdown("**Valoare**")
+col_hh3.markdown("**Home Open**")
+col_hh4.markdown("**Home Close**")
+col_hh5.markdown("**Away Open**")
+col_hh6.markdown("**Away Close**")
+
+hd_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
+
+# Liniile HD
+for key, label in zip(hd_lines_keys, tp_lines_labels):
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
-    # --- Total Puncte ---
-    st.subheader("Total Puncte (Over/Under) - 7 Linii")
+    col1.markdown(f"**{label}**")
+    data_input[f'hd_line_{key}'] = col2.number_input("", min_value=-20.0, max_value=20.0, 
+                                                      value=get_value(f'hd_line_{key}'), step=0.5, format="%.1f", 
+                                                      key=f'hd_line_{key}' + current_key_suffix)
     
-    # Header
-    col_h1, col_h2, col_h3, col_h4, col_h5, col_h6 = st.columns(6)
-    col_h1.markdown("**Linia**")
-    col_h2.markdown("**Valoare**")
-    col_h3.markdown("**Over Open**")
-    col_h4.markdown("**Over Close**")
-    col_h5.markdown("**Under Open**")
-    col_h6.markdown("**Under Close**")
+    data_input[f'hd_open_home_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
+                                                           value=get_value(f'hd_open_home_{key}'), step=0.01, format="%.2f", 
+                                                           key=f'hd_open_home_{key}' + current_key_suffix)
+    data_input[f'hd_close_home_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
+                                                            value=get_value(f'hd_close_home_{key}'), step=0.01, format="%.2f", 
+                                                            key=f'hd_close_home_{key}' + current_key_suffix)
     
-    # Campul istoric open (V7.3 specific)
-    st.markdown("---")
-    st.subheader("Linia Open Istorica")
-    col_open_hist, _ = st.columns([1, 5])
+    data_input[f'hd_open_away_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
+                                                            value=get_value(f'hd_open_away_{key}'), step=0.01, format="%.2f", 
+                                                            key=f'hd_open_away_{key}' + current_key_suffix)
+    data_input[f'hd_close_away_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
+                                                             value=get_value(f'hd_close_away_{key}'), step=0.01, format="%.2f", 
+                                                             key=f'hd_close_away_{key}' + current_key_suffix)
+
+st.markdown("---")
+
+# Butonul de Rulare
+if st.button("🔥 Ruleaza Analiza Hibrid V7.3"):
+    # 1. Salvarea datelor curente in st.session_state (sursa de adevar)
+    st.session_state['form_data'].update(data_input)
     
-    key_hist = 'tp_line_open_hist'
-    # number_input: Cheie_Unica = Cheie_Baza + Sufix
-    tp_line_open_hist = col_open_hist.number_input("Open Istoric", min_value=150.0, max_value=300.0, 
-                                                  value=get_value(key_hist), step=0.5, format="%.1f", 
-                                                  key=key_hist + current_key_suffix) 
-    data_input[key_hist] = tp_line_open_hist
-    st.markdown("---")
-
-    tp_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
-    tp_lines_labels = ['Close Line', '-3 pts (M3)', '-2 pts (M2)', '-1 pts (M1)', '+1 pts (P1)', '+2 pts (P2)', '+3 pts (P3)']
+    # 2. Apelam functia principala de analiza
+    markdown_output, result_data = run_hybrid_analyzer(data_input)
     
-    # Liniile TP
-    for key, label in zip(tp_lines_keys, tp_lines_labels):
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
-        
-        col1.markdown(f"**{label}**")
-        
-        # TOATE CÂMPURILE TP AU ACUM SUFIXUL DE CHEIE
-        data_input[f'tp_line_{key}'] = col2.number_input("", min_value=150.0, max_value=300.0, 
-                                                          value=get_value(f'tp_line_{key}'), step=0.5, format="%.1f", 
-                                                          key=f'tp_line_{key}' + current_key_suffix) 
-        data_input[f'tp_open_over_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
-                                                               value=get_value(f'tp_open_over_{key}'), step=0.01, format="%.2f", 
-                                                               key=f'tp_open_over_{key}' + current_key_suffix)
-        data_input[f'tp_close_over_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'tp_close_over_{key}'), step=0.01, format="%.2f", 
-                                                                key=f'tp_close_over_{key}' + current_key_suffix)
-        data_input[f'tp_open_under_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'tp_open_under_{key}'), step=0.01, format="%.2f", 
-                                                                key=f'tp_open_under_{key}' + current_key_suffix)
-        data_input[f'tp_close_under_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
-                                                                 value=get_value(f'tp_close_under_{key}'), step=0.01, format="%.2f", 
-                                                                 key=f'tp_close_under_{key}' + current_key_suffix)
+    # 3. Salvare in Stare
+    st.session_state['analysis_output'] = markdown_output
+    st.session_state['result_data'] = result_data
 
-    st.markdown("---")
-
-    # --- Handicap ---
-    st.subheader("Handicap (Home/Away) - 7 Linii")
-
-    # Header Handicap
-    col_hh1, col_hh2, col_hh3, col_hh4, col_hh5, col_hh6 = st.columns(6)
-    col_hh1.markdown("**Linia**")
-    col_hh2.markdown("**Valoare**")
-    col_hh3.markdown("**Home Open**")
-    col_hh4.markdown("**Home Close**")
-    col_hh5.markdown("**Away Open**")
-    col_hh6.markdown("**Away Close**")
-
-    hd_lines_keys = ['close', 'm3', 'm2', 'm1', 'p1', 'p2', 'p3']
-
-    # Liniile HD
-    for key, label in zip(hd_lines_keys, tp_lines_labels):
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
-        
-        col1.markdown(f"**{label}**")
-        # TOATE CÂMPURILE HD AU ACUM SUFIXUL DE CHEIE
-        data_input[f'hd_line_{key}'] = col2.number_input("", min_value=-20.0, max_value=20.0, 
-                                                          value=get_value(f'hd_line_{key}'), step=0.5, format="%.1f", 
-                                                          key=f'hd_line_{key}' + current_key_suffix)
-        
-        data_input[f'hd_open_home_{key}'] = col3.number_input("", min_value=1.0, max_value=5.0, 
-                                                               value=get_value(f'hd_open_home_{key}'), step=0.01, format="%.2f", 
-                                                               key=f'hd_open_home_{key}' + current_key_suffix)
-        data_input[f'hd_close_home_{key}'] = col4.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'hd_close_home_{key}'), step=0.01, format="%.2f", 
-                                                                key=f'hd_close_home_{key}' + current_key_suffix)
-        
-        data_input[f'hd_open_away_{key}'] = col5.number_input("", min_value=1.0, max_value=5.0, 
-                                                                value=get_value(f'hd_open_away_{key}'), step=0.01, format="%.2f", 
-                                                                key=f'hd_open_away_{key}' + current_key_suffix)
-        data_input[f'hd_close_away_{key}'] = col6.number_input("", min_value=1.0, max_value=5.0, 
-                                                                 value=get_value(f'hd_close_away_{key}'), step=0.01, format="%.2f", 
-                                                                 key=f'hd_close_away_{key}' + current_key_suffix)
-    
-    st.markdown("---")
-    
-    # Butonul de Rulare
-    submitted = st.form_submit_button("🔥 Ruleaza Analiza Hibrid V7.3")
-
-    if submitted:
-        # 1. Salvarea datelor curente in st.session_state (sursa de adevar)
-        st.session_state['form_data'].update(data_input)
-        
-        # 2. Apelam functia principala de analiza
-        markdown_output, result_data = run_hybrid_analyzer(data_input)
-        
-        # 3. Salvare in Stare
-        st.session_state['analysis_output'] = markdown_output
-        st.session_state['result_data'] = result_data
-        
-        
 # --- Zona de Rezultate ---
 
 if st.session_state['analysis_output']:
